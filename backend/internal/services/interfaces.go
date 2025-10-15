@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypsis-backend/internal/model"
 	"mime/multipart"
 )
 
@@ -103,19 +104,19 @@ type KMSInterface interface {
 // It provides generic methods for client CRUD operations and token handling.
 type OAuth2Interface interface {
 	// CreateClient creates a new OAuth2 client with the provided input.
-	CreateClient(ctx context.Context, input interface{}) (map[string]interface{}, error)
+	CreateClient(ctx context.Context, input *model.ApplicationRequest) (*model.OAuth2ClientResponse, error)
 	// GetClient retrieves details of an OAuth2 client by clientId.
-	GetClient(ctx context.Context, clientId string) (map[string]interface{}, error)
+	GetClient(ctx context.Context, clientId string) (*model.OAuth2ClientResponse, error)
 	// ListClients returns a paginated list of OAuth2 clients.
-	ListClients(ctx context.Context, pageToken string, perPage int64) ([]map[string]interface{}, error)
+	ListClients(ctx context.Context, pageToken string, perPage int64) ([]*model.OAuth2ClientResponse, error)
 	// UpdateClient updates an OAuth2 client with the specified parameters.
-	UpdateClient(ctx context.Context, clientName string, operations string, path string, value interface{}) (map[string]interface{}, error)
+	UpdateClient(ctx context.Context, clientName string, operations string, path string, value interface{}) (*model.OAuth2ClientResponse, error)
 	// DeleteClient removes an OAuth2 client by clientId.
 	DeleteClient(ctx context.Context, clientId string) error
 	// IntrospectToken checks the validity and details of a token for a given scope.
-	IntrospectToken(ctx context.Context, token, scope string) (map[string]interface{}, error)
+	IntrospectToken(ctx context.Context, token, scope string) (*model.OAuth2TokenResponse, error)
 	// TokenRequest requests a new token using the provided input.
-	TokenRequest(ctx context.Context, input interface{}) (map[string]interface{}, error)
+	TokenRequest(ctx context.Context, input *model.TokenRequest) (*model.TokenResponse, error)
 	// RevokeToken revokes a refresh token for the specified client.
 	RevokeToken(ctx context.Context, clientId, clientSecret, refreshToken string) (string, error)
 }
@@ -124,15 +125,15 @@ type OAuth2Interface interface {
 // It provides methods for uploading, downloading, updating, deleting, and managing files and their metadata.
 type StorageInterface interface {
 	// UploadFile uploads a file to the specified bucket with the given name and size.
-	UploadFile(ctx context.Context, bucketName string, fileName string, file multipart.File, fileSize int64) (map[string]interface{}, error)
+	UploadFile(ctx context.Context, bucketName string, fileName string, file multipart.File, fileSize int64) (*model.StorageTransactionResponse, error)
 	// DownloadFile retrieves the contents of a file from the specified bucket.
 	DownloadFile(ctx context.Context, bucketName string, fileName string) ([]byte, error)
 	// DeleteFile removes a file from the specified bucket.
 	DeleteFile(ctx context.Context, bucketName string, fileName string) error
 	// UpdateFile replaces an existing file in the bucket with a new file and size.
-	UpdateFile(ctx context.Context, bucketName, fileName string, file multipart.File, fileSize int64) (map[string]interface{}, error)
+	UpdateFile(ctx context.Context, bucketName, fileName string, file multipart.File, fileSize int64) (*model.StorageTransactionResponse, error)
 	// Exists checks if a file exists in the specified bucket and returns its metadata if present.
-	Exists(ctx context.Context, bucketName string, fileName string) (bool, map[string]interface{}, error)
+	Exists(ctx context.Context, bucketName string, fileName string) (bool, *model.StorageTransactionResponse, error)
 	// ListFiles returns a list of all file names in the specified bucket.
 	ListFiles(ctx context.Context, bucketName string) ([]string, error)
 	// GetFileMetadata retrieves metadata for a file in the specified bucket.

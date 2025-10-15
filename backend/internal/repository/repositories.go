@@ -77,7 +77,7 @@ type AdminRepository interface {
 
 // AppsRepository defines the contract for application data access operations.
 // It provides methods for creating, retrieving, updating, deleting, restoring, and listing applications.
-type AppsRepository interface {
+type ApplicationRepository interface {
 	// Create adds a new application record.
 	Create(ctx context.Context, app *entity.Apps) error
 	// GetByID retrieves an application by its ID.
