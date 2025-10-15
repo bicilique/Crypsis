@@ -1,0 +1,196 @@
+version: '3.7'
+
+# Settings and configurations that are common for all containers
+x-minio-common: &minio-common
+  image: quay.io/minio/minio:RELEASE.2025-02-28T09-55-16Z
+  command: server --console-address ":9001" http://minio{1...4}/data{1...2}
+  expose:
+    - "9000"
+    - "9001"
+  environment:
+    MINIO_ROOT_USER: minioadmin
+    MINIO_ROOT_PASSWORD: minioadmin
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+    interval: 5s
+    timeout: 5s
+    retries: 5
+
+services:
+  minio1:
+    <<: *minio-common
+    hostname: minio1
+    volumes:
+      - data1-1:/data1
+      - data1-2:/data2
+    restart: unless-stopped
+
+  minio2:
+    <<: *minio-common
+    hostname: minio2
+    volumes:
+      - data2-1:/data1
+      - data2-2:/data2
+    restart: unless-stopped
+
+  minio3:
+    <<: *minio-common
+    hostname: minio3
+    volumes:
+      - data3-1:/data1
+      - data3-2:/data2
+    restart: unless-stopped
+
+  minio4:
+    <<: *minio-common
+    hostname: minio4
+    volumes:
+      - data4-1:/data1
+      - data4-2:/data2
+    restart: unless-stopped
+
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      minio1:
+        condition: service_healthy
+      minio2:
+        condition: service_healthy
+      minio3:
+        condition: service_healthy
+      minio4:
+        condition: service_healthy
+    env_file: .env
+    entrypoint: >
+      /bin/sh -c "
+        until mc alias set myminio http://minio1:9000 minioadmin minioadmin; do
+          echo 'Waiting for MinIO...';
+          sleep 2;
+        done;
+
+        echo 'Creating bucket...';
+        mc mb -p myminio/${BUCKET_NAME};
+
+        echo 'Creating access key (user)...';
+        mc admin user add myminio ${STORAGE_ACCESS_KEY} ${STORAGE_SECRET_KEY};
+
+        echo 'Attaching readwrite policy...';
+        mc admin policy attach myminio readwrite --user=${STORAGE_ACCESS_KEY};
+
+        echo 'MinIO setup complete.';
+        exit 0;
+      "
+
+  nginx:
+    image: nginx:1.19.2-alpine
+    hostname: nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    depends_on:
+      - minio1
+      - minio2
+      - minio3
+      - minio4
+    restart: unless-stopped
+
+  db:
+    image: postgres:16.3
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TEST_DEV_USER: ${TEST_DEV_USER}
+      TEST_DEV_PASSWORD: ${TEST_DEV_PASSWORD}
+      TEST_DEV_DB: ${TEST_DEV_DB}
+      HYDRA_DB_USER: ${HYDRA_DB_USER}
+      HYDRA_DB_PASSWORD: ${HYDRA_DB_PASSWORD}
+      HYDRA_DB: ${HYDRA_DB}
+      DEFAULT_ADMIN_CLIENT_ID: ${DEFAULT_ADMIN_CLIENT_ID}
+      DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME}
+      DEFAULT_ADMIN_SECRET: ${DEFAULT_ADMIN_SECRET}
+      DEFAULT_ADMIN_SALT: ${DEFAULT_ADMIN_SALT}
+    volumes:
+      - ./data/db_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+      - ./scripts/init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - minio1
+      - minio2
+      - minio3
+      - minio4
+    restart: always
+
+  hydra-migrate:
+    image: oryd/hydra:v2.2
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DSN: postgres://${HYDRA_DB_USER}:${HYDRA_DB_PASSWORD}@db:5432/${HYDRA_DB}?sslmode=disable
+    command: migrate sql -e --yes
+
+  hydra:
+    image: oryd/hydra:v2.2
+    ports:
+      - "4444:4444"
+      - "4445:4445"
+      - "5555:5555"
+    environment:
+      DSN: postgres://${HYDRA_DB_USER}:${HYDRA_DB_PASSWORD}@db:5432/${HYDRA_DB}?sslmode=disable
+      STRATEGIES_ACCESS_TOKEN: opaque
+      SECRETS_SYSTEM: ${HYDRA_SYSTEM_SECRET}
+    volumes:
+      - ./config/hydra.yml:/etc/config/hydra.yml
+    command: serve -c /etc/config/hydra.yml all --dev
+    depends_on:
+      - hydra-migrate
+    restart: unless-stopped
+
+  hydra-init:
+    image: alpine:latest
+    depends_on:
+      - hydra
+    volumes:
+      - ./scripts/init-hydra.sh:/init-hydra.sh
+    entrypoint: ["/bin/sh", "/init-hydra.sh"]
+    env_file: .env
+    restart: on-failure
+
+  e-crypt:
+    image: afiffaizianur/e-crypt:latest
+    container_name: e-crypt
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - GIN_MODE=debug
+      - MKEY_PATH=/sample.key
+    volumes:
+      - ./resources/sample.key:/sample.key
+    depends_on:
+      - db
+      - nginx
+      - hydra
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  data1-1:
+  data1-2:
+  data2-1:
+  data2-2:
+  data3-1:
+  data3-2:
+  data4-1:
+  data4-2:
+  db_data:
