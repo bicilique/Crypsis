@@ -2,6 +2,7 @@ package helper
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -10,6 +11,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+
+	"github.com/xtgo/uuid"
 )
 
 // GetFileSize returns the size of a multipart.File.
@@ -163,4 +166,22 @@ func FileToBase64(filePath string) (string, error) {
 	}
 	base64Str := base64.StdEncoding.EncodeToString(fileBytes)
 	return base64Str, nil
+}
+
+func GenerateCustomUUID() uuid.UUID {
+	uuidBytes := make([]byte, 16)
+
+	// Read 16 random bytes
+	_, err := rand.Read(uuidBytes)
+	if err != nil {
+		return uuid.UUID{}
+	}
+
+	// Set version (4) and variant (RFC 4122) bits
+	uuidBytes[6] = (uuidBytes[6] & 0x0f) | 0x40 // Version 4
+	uuidBytes[8] = (uuidBytes[8] & 0x3f) | 0x80 // Variant is RFC 4122
+
+	// Convert bytes to UUID type
+	secureUUID := uuid.FromBytes(uuidBytes)
+	return secureUUID
 }

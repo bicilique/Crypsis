@@ -49,3 +49,25 @@ type LocateResponse struct {
 	LocatedItems      int      `json:"located_items"`
 	UniqueIdentifiers []string `json:"unique_identifiers"`
 }
+
+type KeyConfig struct {
+	UID       string `json:"uid"`
+	KEK       string `json:"key"`
+	KMSEnable bool   `json:"kms_enable"`
+}
+
+type MetaDataDTO struct {
+	KeyUID            string `json:"keyUID"`
+	Key               string `json:"key"`
+	MimeType          string `json:"mimeType"`
+	Size              int64  `json:"size"`
+	Hash              string `json:"hash"`
+	EncryptedFileHash string `json:"encryptedFileHash"`
+}
+
+type ClientConfig struct {
+	BucketName        string `json:"bucket_name"`
+	HashMethod        string `json:"hash_method"`
+	HashEncryptedFile bool   `json:"hash_encrypted_file"`
+	EncyptionMethod   string `json:"encyption_method"`
+}

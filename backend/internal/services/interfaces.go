@@ -10,19 +10,19 @@ import (
 // It provides methods for adding, updating, retrieving, listing, deleting, recovering applications, and rotating secrets.
 type ApplicationInterface interface {
 	// AddApp creates a new application with the specified name, URI, and redirect URI.
-	AddApp(ctx context.Context, appName, appUri, redirectUri string) (map[string]interface{}, error)
+	AddApp(ctx context.Context, appName, appUri, redirectUri string) (*model.AppDetailResponse, error)
 	// UpdateApp updates an existing application's details using its UID.
-	UpdateApp(ctx context.Context, appUID string, appName, appUri, redirectUri string) (map[string]interface{}, error)
+	UpdateApp(ctx context.Context, appUID string, appName, appUri, redirectUri string) (*model.AppDetailResponse, error)
 	// GetInfo retrieves information about an application by its UID.
-	GetInfo(ctx context.Context, appUID string) (map[string]interface{}, error)
+	GetInfo(ctx context.Context, appUID string) (*model.AppDetailResponse, error)
 	// ListApps returns a paginated and sorted list of applications.
-	ListApps(ctx context.Context, limit, offset int, sortBy, order string) (int64, map[string]interface{}, error)
+	ListApps(ctx context.Context, limit, offset int, sortBy, order string) (int64, *[]model.AppResponse, error)
 	// DeleteApp removes an application by its UID.
 	DeleteApp(ctx context.Context, appUID string) error
 	// RecoverApp restores a deleted application by its UID.
 	RecoverApp(ctx context.Context, appUID string) (*string, error)
 	// RotateSecret rotates the secret for the specified application UID.
-	RotateSecret(ctx context.Context, appUID string) (map[string]interface{}, error)
+	RotateSecret(ctx context.Context, appUID string) (*model.AppDetailResponse, error)
 }
 
 // AdminInterface defines the contract for administrative user management operations.
@@ -43,7 +43,7 @@ type AdminInterface interface {
 	// DeleteAdmin removes the admin user identified by requestID.
 	DeleteAdmin(ctx context.Context, requestID string) (string, error)
 	// GetAdminList returns a paginated list of admin users.
-	GetAdminList(ctx context.Context, offset int, limit int) (map[string]interface{}, error)
+	GetAdminList(ctx context.Context, offset int, limit int) (*[]model.AdminResponse, error)
 }
 
 // FileInterface defines the contract for file management operations.
@@ -58,7 +58,7 @@ type FileInterface interface {
 	// Decrypts a file and returns decrypted form
 	DecryptFile(ctx context.Context, clientID, fileUID string, input multipart.File) ([]byte, error)
 	// Returns metadata of a file
-	GetFileMetadata(ctx context.Context, clientID, fileUID string) (map[string]interface{}, error)
+	GetFileMetadata(ctx context.Context, clientID, fileUID string) (*model.FileMetadataResponse, error)
 	// Updates a file in storage
 	UpdateFile(ctx context.Context, appID, clientID, fileName string, input multipart.File) (string, error)
 	// Deletes a file from storage
@@ -68,11 +68,11 @@ type FileInterface interface {
 	// Generates a new key and re-encrypts all files with the new key
 	ReKey(ctx context.Context, clientID, keyUID string) (string, error)
 	// Return a list of files
-	ListFiles(ctx context.Context, clientID string, limit, offset int, sortBy, order string) (int64, []map[string]interface{}, error)
+	ListFiles(ctx context.Context, clientID string, limit, offset int, sortBy, order string) (int64, *[]model.FileResponse, error)
 	// Return a list of files for admin only
-	ListFilesForAdmin(ctx context.Context, adminID, appID string, limit, offset int, sortBy, order string) (int64, []map[string]interface{}, error)
+	ListFilesForAdmin(ctx context.Context, adminID, appID string, limit, offset int, sortBy, order string) (int64, *[]model.FileResponse, error)
 	// Return a list of logs for admin only
-	ListLogs(ctx context.Context, limit, offset int, sortBy, order string) (int64, []map[string]interface{}, error)
+	ListLogs(ctx context.Context, limit, offset int, sortBy, order string) (int64, *[]model.FileLogResponse, error)
 }
 
 // KMSInterface defines the contract for Key Management Service operations.
