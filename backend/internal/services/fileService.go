@@ -135,6 +135,7 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 
 	// Generate Key and Encrypt file
 	encryptedFile, metaDataDTO, err := c.encryptFile(ctx, "", fileUID, input)
+	// encryptedFile, metaDataDTO, err := c.encryptFile(ctx, "", fileUID, input)
 	if err != nil {
 		return "", err
 	}
@@ -597,12 +598,14 @@ func (c *FileService) encryptFile(ctx context.Context, fileKey, fileUID string, 
 	//	Use provided key
 	if fileKey != "" {
 		key = fileKey
+		slog.Debug("Using provided key for encryption")
 	} else if fileUID != "" { // Generate encryption key form KMS
 		key, keyUID, err = c.getEncryptionKey(ctx, fileUID)
 		if err != nil {
 			slog.Error("Failed to generate key", slog.Any("error", err))
 			return nil, nil, model.ErrKeyGenerationFailed
 		}
+		slog.Debug("Generated new key for encryption", slog.Int("key_length", len(key)))
 	} else {
 		return nil, nil, model.ErrFileUidOrKeyInvalid
 	}
@@ -622,6 +625,7 @@ func (c *FileService) encryptFile(ctx context.Context, fileKey, fileUID string, 
 // getEncryptionKey generates or retrieves an encryption key
 func (c *FileService) getEncryptionKey(ctx context.Context, fileUID string) (key, keyUID string, err error) {
 	if c.keyConfig.KMSEnable {
+		slog.Info("KMS is enabled, generating key from KMS")
 		keyUID, err = c.kmsService.GenerateSymetricKey(ctx, fileUID)
 		if err != nil {
 			return "", "", model.ErrFailedToGenerateKeyFromKMS
@@ -632,11 +636,19 @@ func (c *FileService) getEncryptionKey(ctx context.Context, fileUID string) (key
 			return "", "", model.ErrFailedToImportKeyFromKMS
 		}
 
-		key, err = helper.HexToBase64(keyHex)
+		// Convert hex string to bytes
+		keyBytes, err := helper.HexToBytes(keyHex)
 		if err != nil {
-			return "", "", fmt.Errorf("failed to decode key: %w", err)
+			return "", "", fmt.Errorf("failed to decode hex key: %w", err)
+		}
+
+		// Convert raw key bytes to Tink keyset format
+		key, err = c.cryptoService.ImportRawKeyAsBase64(keyBytes)
+		if err != nil {
+			return "", "", fmt.Errorf("failed to convert raw key to Tink keyset: %w", err)
 		}
 	} else {
+		slog.Info("KMS is not enabled, generating local key")
 		key, err = c.cryptoService.GenerateKey()
 		if err != nil {
 			return "", "", model.ErrKeyGenerationFailed

@@ -3,8 +3,6 @@ package main
 import "crypsis-backend/internal/config"
 
 func main() {
-	// startApp()
-
 	// Load environment
 	properties := config.LoadProperties()
 
@@ -21,11 +19,12 @@ func main() {
 		panic(err)
 	}
 
+	// Create AppConfig
 	appConfig := &config.AppConfig{
 		Properties: properties,
 		DB:         db.Connection,
 	}
 
+	// Bootstrap the application
 	config.BootstrapApp(appConfig)
-
 }

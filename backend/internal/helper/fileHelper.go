@@ -158,6 +158,15 @@ func HexToBase64(hexStr string) (string, error) {
 	return base64Str, nil
 }
 
+// HexToBytes converts a hex-encoded string to a byte slice.
+func HexToBytes(hexStr string) ([]byte, error) {
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
+}
+
 // FileToBase64 reads a file from the given path and encodes its content to a base64 string.
 func FileToBase64(filePath string) (string, error) {
 	fileBytes, err := os.ReadFile(filePath)

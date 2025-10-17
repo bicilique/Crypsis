@@ -37,6 +37,7 @@ func NewHydraService(hydraAdminURL, hydraPublicURL string) OAuth2Interface {
 	return &HydraService{
 		apiClientAdmin:  ory.NewAPIClient(adminConfig),
 		apiClientPublic: ory.NewAPIClient(publicConfig),
+		publicURL:       hydraPublicURL,
 	}
 }
 
@@ -172,6 +173,10 @@ func (h *HydraService) TokenRequest(ctx context.Context, input *model.TokenReque
 	form.Add("client_secret", input.ClientSecret)
 	form.Add("scope", input.Scope)
 
+	fmt.Println("Token Request to Hydra with client_id: " + input.ClientId)
+	fmt.Println("Client Secret: " + input.ClientSecret)
+	fmt.Println("Public URL: " + h.publicURL)
+	fmt.Println("Form Data: " + input.Scope)
 	req, err := http.NewRequest("POST", h.publicURL+"/oauth2/token", bytes.NewBufferString(form.Encode()))
 	if err != nil {
 		slog.Error("failed to create request", slog.Any("error", err))

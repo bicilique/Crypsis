@@ -9,6 +9,7 @@ import (
 	"crypsis-backend/internal/repository"
 	"crypsis-backend/internal/services"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -124,10 +125,22 @@ func initServices(config *Properties, repos Repositories, db *gorm.DB) Services 
 		if err != nil {
 			log.Fatalf("Failed to export key: %v", err)
 		}
-		key, err := helper.HexToBase64(keyHex)
+		slog.Info("Successfully exported KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Int("hex_length", len(keyHex)))
+
+		// Convert hex to bytes
+		keyBytes, err := helper.HexToBytes(keyHex)
 		if err != nil {
-			log.Fatalf("Failed to decode key: %v", err)
+			log.Fatalf("Failed to decode hex key: %v", err)
 		}
+		slog.Info("Converted KEK hex to bytes", slog.Int("bytes_length", len(keyBytes)))
+
+		// Convert raw key bytes to Tink keyset format
+		key, err := cryptographicService.ImportRawKeyAsBase64(keyBytes)
+		if err != nil {
+			log.Fatalf("Failed to convert raw key to Tink keyset: %v", err)
+		}
+		slog.Info("Successfully converted KEK to Tink keyset", slog.Int("base64_length", len(key)))
+
 		keyConfig.UID = config.KMSKeyUID
 		keyConfig.KEK = key
 	} else {

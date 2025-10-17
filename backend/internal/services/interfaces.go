@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypsis-backend/internal/model"
 	"mime/multipart"
+
+	"github.com/tink-crypto/tink-go/v2/keyset"
 )
 
 // ApplicationInterface defines the contract for application management operations.
@@ -149,6 +151,10 @@ type StorageInterface interface {
 type CryptographicInterface interface {
 	// GenerateKey creates a new cryptographic key.
 	GenerateKey() (string, error)
+	// KeysetFromRawAES256GCM converts a raw AES-256-GCM key (32 bytes) into a Tink keyset handle.
+	KeysetFromRawAES256GCM(rawKey []byte) (*keyset.Handle, error)
+	// ImportRawKeyAsBase64 imports a raw AES-256 key and returns it as a base64-encoded Tink keyset.
+	ImportRawKeyAsBase64(rawKey []byte) (string, error)
 	// EncryptString encrypts a string using the provided key.
 	EncryptString(key, text string) (string, error)
 	// DecryptString decrypts a string using the provided key.

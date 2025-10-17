@@ -14,6 +14,9 @@ import (
 	"github.com/tink-crypto/tink-go/v2/insecurecleartextkeyset"
 	"github.com/tink-crypto/tink-go/v2/keyset"
 	"github.com/tink-crypto/tink-go/v2/prf"
+	aeadpb "github.com/tink-crypto/tink-go/v2/proto/aes_gcm_go_proto"
+	tinkpb "github.com/tink-crypto/tink-go/v2/proto/tink_go_proto"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -48,6 +51,85 @@ func (c *CryptographicService) GenerateKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
 
+// KeysetFromRawAES256GCM converts a raw AES-256-GCM key (32 bytes) into a Tink keyset handle
+// This is useful when importing keys from KMS or other sources that provide raw key material
+func (c *CryptographicService) KeysetFromRawAES256GCM(rawKey []byte) (*keyset.Handle, error) {
+	// Validate key length (AES-256 requires 32 bytes)
+	if len(rawKey) != 32 {
+		return nil, fmt.Errorf("invalid key length: expected 32 bytes for AES-256, got %d bytes", len(rawKey))
+	}
+
+	// 1. Create AES-GCM key proto
+	aesKey := &aeadpb.AesGcmKey{
+		Version:  0,
+		KeyValue: rawKey,
+	}
+	serializedKey, err := proto.Marshal(aesKey)
+	if err != nil {
+		slog.Error("Failed to marshal AES-GCM key", slog.Any("error", err))
+		return nil, fmt.Errorf("failed to marshal AES-GCM key: %w", err)
+	}
+
+	// 2. Wrap it in KeyData
+	keyData := &tinkpb.KeyData{
+		TypeUrl:         "type.googleapis.com/google.crypto.tink.AesGcmKey",
+		Value:           serializedKey,
+		KeyMaterialType: tinkpb.KeyData_SYMMETRIC,
+	}
+
+	// 3. Build Keyset
+	keyID := uint32(123456)
+	ks := &tinkpb.Keyset{
+		PrimaryKeyId: keyID,
+		Key: []*tinkpb.Keyset_Key{
+			{
+				KeyData:          keyData,
+				Status:           tinkpb.KeyStatusType_ENABLED,
+				KeyId:            keyID,
+				OutputPrefixType: tinkpb.OutputPrefixType_TINK,
+			},
+		},
+	}
+
+	// 4. Create KeysetHandle using insecure API (since we're importing raw key material)
+	buf := new(bytes.Buffer)
+	if err := keyset.NewBinaryWriter(buf).Write(ks); err != nil {
+		slog.Error("Failed to write keyset", slog.Any("error", err))
+		return nil, fmt.Errorf("failed to write keyset: %w", err)
+	}
+
+	// Read it back using insecurecleartextkeyset
+	reader := keyset.NewBinaryReader(bytes.NewReader(buf.Bytes()))
+	handle, err := insecurecleartextkeyset.Read(reader)
+	if err != nil {
+		slog.Error("Failed to read keyset", slog.Any("error", err))
+		return nil, fmt.Errorf("failed to read keyset: %w", err)
+	}
+
+	slog.Info("Successfully created Tink keyset from raw AES-256 key")
+	return handle, nil
+}
+
+// ImportRawKeyAsBase64 imports a raw AES-256 key and returns it as a base64-encoded Tink keyset
+// This is useful for converting KMS keys to the format expected by EncryptFile/DecryptFile
+func (c *CryptographicService) ImportRawKeyAsBase64(rawKey []byte) (string, error) {
+	// Convert raw key to Tink keyset handle
+	handle, err := c.KeysetFromRawAES256GCM(rawKey)
+	if err != nil {
+		return "", err
+	}
+
+	// Serialize the keyset to bytes
+	buf := new(bytes.Buffer)
+	writer := keyset.NewBinaryWriter(buf)
+	if err := insecurecleartextkeyset.Write(handle, writer); err != nil {
+		slog.Error("Failed to serialize keyset", slog.Any("error", err))
+		return "", fmt.Errorf("failed to serialize keyset: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
 // EncryptString encrypts the provided plaintext string using Tink AEAD
 func (c *CryptographicService) EncryptString(key, text string) (string, error) {
 	memguardKey := memguard.NewBufferFromBytes([]byte(key))
@@ -55,8 +137,11 @@ func (c *CryptographicService) EncryptString(key, text string) (string, error) {
 
 	keyBytes, err := base64.StdEncoding.DecodeString(memguardKey.String())
 	if err != nil {
+		slog.Error("Failed to decode base64 key in EncryptString", slog.Any("error", err), slog.Int("key_length", len(key)))
 		return "", fmt.Errorf("invalid base64 key: %w", err)
 	}
+
+	slog.Debug("EncryptString: key decoded", slog.Int("key_base64_length", len(key)), slog.Int("decoded_bytes_length", len(keyBytes)))
 
 	secureKeyBytes := memguard.NewBufferFromBytes(keyBytes)
 	defer secureKeyBytes.Destroy()
@@ -64,7 +149,7 @@ func (c *CryptographicService) EncryptString(key, text string) (string, error) {
 	reader := keyset.NewBinaryReader(bytes.NewReader(secureKeyBytes.Bytes()))
 	handle, err := insecurecleartextkeyset.Read(reader)
 	if err != nil {
-		slog.Error("Failed to read keyset", slog.Any("error", err))
+		slog.Error("Failed to read keyset in EncryptString", slog.Any("error", err), slog.Int("keyset_bytes_length", len(keyBytes)))
 		return "", fmt.Errorf("failed to read keyset: %w", err)
 	}
 
@@ -165,9 +250,11 @@ func (c *CryptographicService) EncryptFile(key string, file []byte) ([]byte, err
 
 	keyBytes, err := base64.StdEncoding.DecodeString(memguardKey.String())
 	if err != nil {
+		slog.Error("Failed to decode base64 key", slog.Any("error", err))
 		return nil, fmt.Errorf("invalid base64 key: %w", err)
 	}
 
+	slog.Debug("Key decoded successfully", slog.Int("decoded_length", len(keyBytes)))
 	// Secure keyBytes with memguard
 	secureKeyBytes := memguard.NewBufferFromBytes(keyBytes)
 	defer secureKeyBytes.Destroy()
@@ -175,7 +262,7 @@ func (c *CryptographicService) EncryptFile(key string, file []byte) ([]byte, err
 	reader := keyset.NewBinaryReader(bytes.NewReader(secureKeyBytes.Bytes()))
 	handle, err := insecurecleartextkeyset.Read(reader)
 	if err != nil {
-		slog.Error("Failed to read keyset", slog.Any("error", err))
+		slog.Error("Failed to read keyset", slog.Any("error", err), slog.Int("keyset_bytes_length", len(keyBytes)))
 		return nil, fmt.Errorf("failed to read keyset: %w", err)
 	}
 

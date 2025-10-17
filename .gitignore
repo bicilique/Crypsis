@@ -640,3 +640,5 @@ docker-compose-old.yml
 env
 backend/test/services/README.md
 backend/test/services/KMS_SERVICE_README.md
+IMPLEMENTATION_SUMMARY.md
+KMS_RAW_KEY_SUPPORT.md
