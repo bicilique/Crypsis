@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"mime/multipart"
 
+	"github.com/awnumar/memguard"
 	"gorm.io/gorm"
 )
 
@@ -28,6 +29,8 @@ type FileService struct {
 	hashMethod            string
 	hashEncryptedFile     bool
 	encryptionMethod      string
+
+	saveKey bool
 }
 
 func NewFileService(params FileServiceParams) FileInterface {
@@ -45,6 +48,7 @@ func NewFileService(params FileServiceParams) FileInterface {
 		hashMethod:            params.HashMethod,
 		hashEncryptedFile:     params.HashEncryptedFile,
 		encryptionMethod:      params.EncryptionMethod,
+		saveKey:               false,
 	}
 }
 
@@ -135,13 +139,6 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 
 	// Generate Key and Encrypt file
 	encryptedFile, metaDataDTO, err := c.encryptFile(ctx, "", fileUID, input)
-	// encryptedFile, metaDataDTO, err := c.encryptFile(ctx, "", fileUID, input)
-	if err != nil {
-		return "", err
-	}
-
-	// Wrap key
-	wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metaDataDTO.Key)
 	if err != nil {
 		return "", err
 	}
@@ -162,8 +159,18 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 		Hash:    metaDataDTO.Hash,
 		EncHash: metaDataDTO.EncryptedFileHash,
 		KeyUID:  metaDataDTO.KeyUID,
-		EncKey:  wrappedKey,
+		EncKey:  "", // Wrapped key to be set below
 		KeyAlgo: c.encryptionMethod,
+	}
+
+	// Wrap key MAYBE WE CAN SKIP THIS IF KMS IS ENABLED
+	if c.saveKey == true {
+		wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metaDataDTO.Key)
+		if err != nil {
+			slog.Error("Failed to wrap key", slog.Any("error", err))
+			return "", err
+		}
+		metadataToBeSaved.EncKey = wrappedKey
 	}
 
 	// Create multipart file
@@ -172,19 +179,23 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 		return "", err
 	}
 
-	// Upload encrypted file
-	transcationResponse, err := c.storageService.UploadFile(ctx, c.bucketName, createFileName(fileToBeSaved.ID), toBeUploadedFile, tobeUploadSize)
-	if err != nil {
-		return "", err
-	}
-
-	metadataToBeSaved.VersionID = transcationResponse.VersionID
-	fileToBeSaved.Location = transcationResponse.Location
-
-	err = c.fileRepository.CreateFileWithMetadata(ctx, fileToBeSaved, metadataToBeSaved)
-	if err != nil {
-		return "", err
-	}
+	// Upload file to storage and save metadata to DB asynchronously
+	go func() {
+		context := context.Background()
+		slog.Info("Uploading file", slog.String("file_id", fileToBeSaved.ID), slog.String("file_name", fileToBeSaved.Name))
+		transcationResponse, err := c.storageService.UploadFile(context, c.bucketName, createFileName(fileToBeSaved.ID), toBeUploadedFile, tobeUploadSize)
+		if err != nil {
+			slog.Error("Failed to upload file to storage", slog.Any("error", err))
+			// TODO DO SOMETHING TO ROLLBACK DB ENTRY
+		}
+		// Save to DB
+		metadataToBeSaved.VersionID = transcationResponse.VersionID
+		fileToBeSaved.Location = transcationResponse.Location
+		err = c.fileRepository.CreateFileWithMetadata(context, fileToBeSaved, metadataToBeSaved)
+		if err != nil {
+			slog.Error("Failed to save file metadata to database", slog.Any("error", err))
+		}
+	}()
 
 	// Save to log
 	c.saveFileLog(ctx, validatedAppID, fileToBeSaved.ID, constant.ActorTypeClient, string(constant.ActionTypeUpload), fileName)
@@ -207,7 +218,6 @@ func (c *FileService) DownloadFile(ctx context.Context, clientID, fileUID string
 	if err != nil {
 		return nil, "", err
 	}
-
 	isExist, _, err := c.storageService.Exists(ctx, c.bucketName, createFileName(fileMetaData.FileID))
 	if err != nil {
 		return nil, "", err
@@ -219,17 +229,45 @@ func (c *FileService) DownloadFile(ctx context.Context, clientID, fileUID string
 	//save to log
 	c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeDownload), fileMetaData.File.Name)
 
-	//unwrap key
-	key, err := c.cryptoService.DecryptString(c.keyConfig.KEK, fileMetaData.EncKey)
-	if err != nil {
-		return nil, "", err
-	}
-
 	//download file
 	encryptedFile, err := c.storageService.DownloadFile(ctx, c.bucketName, createFileName(fileMetaData.FileID))
 	if err != nil {
 		return nil, "", err
 	}
+
+	var key string
+	if fileMetaData.EncKey == "" {
+		// import key from KMS
+		keyHex, err := c.kmsService.ExportKey(ctx, fileMetaData.KeyUID)
+		if err != nil {
+			return nil, "", err
+		}
+
+		// Securely wipe keyHex from memory
+		defer secureKeyString(keyHex)()
+
+		// Convert hex string to bytes
+		keyBytes, err := helper.HexToBytes(keyHex)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to decode hex key: %w", err)
+		}
+
+		// Convert raw key bytes to Tink keyset format
+		key, err = c.cryptoService.ImportRawKeyAsBase64(keyBytes)
+		if err != nil {
+			return nil, "", fmt.Errorf("failed to convert raw key to Tink keyset: %w", err)
+		}
+
+	} else {
+		// unwrap key
+		key, err = c.cryptoService.DecryptString(c.keyConfig.KEK, fileMetaData.EncKey)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	// Securely handle the key
+	defer secureKeyString(key)()
 
 	//decrypt file
 	decryptedFile, err := c.decryptFile(key, fileMetaData.Hash, encryptedFile)
@@ -260,12 +298,6 @@ func (c *FileService) EncryptFile(ctx context.Context, clientID, fileName string
 		return nil, "", err
 	}
 
-	//key wrapping
-	wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metadataDTO.Key)
-	if err != nil {
-		return nil, "", err
-	}
-
 	// File to be saved to db
 	fileToBeSaved := &entity.Files{
 		ID:       fileUID,
@@ -282,8 +314,18 @@ func (c *FileService) EncryptFile(ctx context.Context, clientID, fileName string
 		Hash:    metadataDTO.Hash,
 		EncHash: metadataDTO.EncryptedFileHash,
 		KeyUID:  metadataDTO.KeyUID,
-		EncKey:  wrappedKey,
+		EncKey:  "", // Wrapped key to be set below
 		KeyAlgo: c.encryptionMethod,
+	}
+
+	// save key
+	if c.saveKey == true {
+		wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metadataDTO.Key)
+		if err != nil {
+			slog.Error("Failed to wrap key", slog.Any("error", err))
+			return nil, "", err
+		}
+		metadataToBeSaved.EncKey = wrappedKey
 	}
 
 	err = c.fileRepository.CreateFileWithMetadata(ctx, fileToBeSaved, metadataToBeSaved)
@@ -319,6 +361,9 @@ func (c *FileService) DecryptFile(ctx context.Context, clientID, fileUID string,
 	if err != nil {
 		return nil, err
 	}
+
+	// Securely handle the key
+	defer secureKeyString(key)()
 
 	//read file
 	encryptedFile, _, _, err := helper.GetFileBytesFromMultipart(input)
@@ -389,10 +434,32 @@ func (c *FileService) UpdateFile(ctx context.Context, clientID, fileUID, fileNam
 	}
 
 	// Unwrap Key
-	key, err := c.cryptoService.DecryptString(c.keyConfig.KEK, fileMetaData.EncKey)
-	if err != nil {
-		return "", err
+	var key string
+	if fileMetaData.EncKey == "" {
+		// import key from KMS
+		keyHex, err := c.kmsService.ExportKey(ctx, fileMetaData.KeyUID)
+		if err != nil {
+			return "", err
+		}
+		// Convert hex string to bytes
+		keyBytes, err := helper.HexToBytes(keyHex)
+		if err != nil {
+			return "", fmt.Errorf("failed to decode hex key: %w", err)
+		}
+		// Convert raw key bytes to Tink keyset format
+		key, err = c.cryptoService.ImportRawKeyAsBase64(keyBytes)
+		if err != nil {
+			return "", fmt.Errorf("failed to convert raw key to Tink keyset: %w", err)
+		}
+	} else {
+		key, err = c.cryptoService.DecryptString(c.keyConfig.KEK, fileMetaData.EncKey)
+		if err != nil {
+			return "", err
+		}
 	}
+
+	// Securely handle the key
+	defer secureKeyString(key)()
 
 	// Encrypt File
 	encryptedFile, metaDataDTO, err := c.encryptFile(ctx, key, fileMetaData.FileID, input)
@@ -415,27 +482,31 @@ func (c *FileService) UpdateFile(ctx context.Context, clientID, fileUID, fileNam
 		return "", err
 	}
 
-	// Update File to Storage
-	resp, err := c.storageService.UpdateFile(ctx, c.bucketName, createFileName(fileMetaData.FileID), toBeUploadedFile, tobeUploadSize)
-	if err != nil {
-		return "", err
-	}
+	// Upload file to storage and update metadata to DB asynchronously
+	go func() {
+		context := context.Background()
+		// Update File to Storage
+		resp, err := c.storageService.UpdateFile(context, c.bucketName, createFileName(fileMetaData.FileID), toBeUploadedFile, tobeUploadSize)
+		if err != nil {
+			slog.Error("Failed to update file to storage", slog.Any("error", err))
+		}
 
-	// UPDATING NEW METADADATA
-	fileMetaData.Hash = metaDataDTO.Hash
-	fileMetaData.EncHash = metaDataDTO.EncryptedFileHash
-	fileMetaData.VersionID = resp.VersionID
-	fileToBeUpdated.Location = resp.Location
+		// UPDATING NEW METADADATA
+		fileMetaData.Hash = metaDataDTO.Hash
+		fileMetaData.EncHash = metaDataDTO.EncryptedFileHash
+		fileMetaData.VersionID = resp.VersionID
+		fileToBeUpdated.Location = resp.Location
 
-	// Update data IN DB
-	err = c.fileRepository.UpdateFileAndMetadata(ctx, fileToBeUpdated, fileMetaData)
-	if err != nil {
-		return "", err
-	}
+		// Update data IN DB
+		err = c.fileRepository.UpdateFileAndMetadata(context, fileToBeUpdated, fileMetaData)
+		if err != nil {
+			slog.Error("Failed to update file metadata in database", slog.Any("error", err))
+		}
+
+	}()
 
 	// save to log
 	c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeUpdate), fileMetaData.File.Name)
-
 	return fmt.Sprintf("File %s updated successfully", fileMetaData.File.Name), nil
 }
 
@@ -595,8 +666,7 @@ func (c *FileService) encryptFile(ctx context.Context, fileKey, fileUID string, 
 		return nil, nil, model.ErrHashCalculationFailed
 	}
 
-	//	Use provided key
-	if fileKey != "" {
+	if fileKey != "" { // Use provided key
 		key = fileKey
 		slog.Debug("Using provided key for encryption")
 	} else if fileUID != "" { // Generate encryption key form KMS
@@ -610,6 +680,9 @@ func (c *FileService) encryptFile(ctx context.Context, fileKey, fileUID string, 
 		return nil, nil, model.ErrFileUidOrKeyInvalid
 	}
 
+	// Securely handle key - will be destroyed when cleanup is called
+	defer secureKeyString(key)()
+
 	// Encrypt file
 	encryptedFile, err := c.cryptoService.EncryptFile(key, fileBytes)
 	if err != nil {
@@ -617,7 +690,7 @@ func (c *FileService) encryptFile(ctx context.Context, fileKey, fileUID string, 
 		return nil, nil, model.ErrFileEncryptionFailed
 	}
 
-	// Prepare metadata
+	// Prepare metadata (key still needed here for metadata DTO)
 	metadata := c.createMetadataDTO(keyUID, key, mimeType, fileSize, hashValue, encryptedFile)
 	return encryptedFile, metadata, nil
 }
@@ -635,6 +708,9 @@ func (c *FileService) getEncryptionKey(ctx context.Context, fileUID string) (key
 		if err != nil {
 			return "", "", model.ErrFailedToImportKeyFromKMS
 		}
+
+		// Securely wipe keyHex after use
+		defer secureKeyString(keyHex)()
 
 		// Convert hex string to bytes
 		keyBytes, err := helper.HexToBytes(keyHex)
@@ -683,16 +759,30 @@ func (c *FileService) decryptFile(key, hashValue string, encryptedFile []byte) (
 		return nil, model.ErrFileIsEmpty
 	}
 
+	// Securely handle key - will be destroyed when cleanup is called
+	defer secureKeyString(key)()
+
 	//decrypt file
 	decryptedFile, err := c.cryptoService.DecryptFile(key, encryptedFile)
 	if err != nil {
 		return nil, err
 	}
+
 	//compare hash
 	if !c.cryptoService.CompareHashFile(c.hashMethod, decryptedFile, hashValue) {
 		return nil, model.ErrHashNotMatch
 	}
 	return decryptedFile, nil
+}
+
+func secureKeyString(key string) (cleanup func()) {
+	if key == "" {
+		return func() {}
+	}
+	keyBuf := memguard.NewBufferFromBytes([]byte(key))
+	return func() {
+		keyBuf.Destroy()
+	}
 }
 
 func createFileName(fileName string) string {

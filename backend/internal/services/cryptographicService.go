@@ -141,8 +141,6 @@ func (c *CryptographicService) EncryptString(key, text string) (string, error) {
 		return "", fmt.Errorf("invalid base64 key: %w", err)
 	}
 
-	slog.Debug("EncryptString: key decoded", slog.Int("key_base64_length", len(key)), slog.Int("decoded_bytes_length", len(keyBytes)))
-
 	secureKeyBytes := memguard.NewBufferFromBytes(keyBytes)
 	defer secureKeyBytes.Destroy()
 
