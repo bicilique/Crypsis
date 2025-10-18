@@ -44,8 +44,8 @@ type AdminInterface interface {
 	UpdatePassword(ctx context.Context, adminID, newPassword string) error
 	// DeleteAdmin removes the admin user identified by requestID.
 	DeleteAdmin(ctx context.Context, requestID string) (string, error)
-	// GetAdminList returns a paginated list of admin users.
-	GetAdminList(ctx context.Context, offset int, limit int) (*[]model.AdminResponse, error)
+	// GetAdminList returns a paginated and sorted list of admin users.
+	GetAdminList(ctx context.Context, offset int, limit int, sortBy, order string) (*[]model.AdminResponse, error)
 }
 
 // FileInterface defines the contract for file management operations.

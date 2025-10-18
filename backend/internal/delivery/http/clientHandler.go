@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"crypsis-backend/internal/delivery/middlewere"
+	"crypsis-backend/internal/helper"
 	"crypsis-backend/internal/model"
 	"crypsis-backend/internal/services"
 	"errors"
@@ -356,19 +357,8 @@ func (ch *ClientHandler) ListFiles(c *gin.Context) {
 		limit = 10
 	}
 
-	if order != "asc" && order != "desc" {
-		order = "desc"
-	}
-
-	// Only allow certain sort fields
-	allowedSortFields := map[string]bool{
-		"created_at": true,
-		"name":       true,
-		"size":       true,
-	}
-	if !allowedSortFields[sortBy] {
-		sortBy = "created_at"
-	}
+	// Validate sort parameters using centralized helper
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedFileSortFields)
 
 	count, result, err := ch.clientService.ListFiles(c.Request.Context(), clientID, limit, offset, sortBy, order)
 	if err != nil {

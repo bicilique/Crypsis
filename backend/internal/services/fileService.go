@@ -62,6 +62,9 @@ func (c *FileService) ListFiles(ctx context.Context, clientID string, limit, off
 		return 0, nil, err
 	}
 
+	// Validate sort parameters to prevent SQL injection
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedFileSortFields)
+
 	fmt.Println("Validated App ID:", validatedAppID)
 	fmt.Println("Offset:", offset, "Limit:", limit, "SortBy:", sortBy, "Order:", order)
 
@@ -88,6 +91,9 @@ func (c *FileService) ListFilesForAdmin(ctx context.Context, adminID, appID stri
 	if adminID == "" {
 		return 0, nil, model.ErrInvalidInput
 	}
+
+	// Validate sort parameters to prevent SQL injection
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedFileSortFields)
 
 	var count int64
 	var files []entity.Files
@@ -181,9 +187,9 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 
 	// Upload file to storage and save metadata to DB asynchronously
 	go func() {
-		context := context.Background()
+		uploadCtx := context.Background()
 		slog.Info("Uploading file", slog.String("file_id", fileToBeSaved.ID), slog.String("file_name", fileToBeSaved.Name))
-		transcationResponse, err := c.storageService.UploadFile(context, c.bucketName, createFileName(fileToBeSaved.ID), toBeUploadedFile, tobeUploadSize)
+		transcationResponse, err := c.storageService.UploadFile(uploadCtx, c.bucketName, createFileName(fileToBeSaved.ID), toBeUploadedFile, tobeUploadSize)
 		if err != nil {
 			slog.Error("Failed to upload file to storage", slog.Any("error", err))
 			// TODO DO SOMETHING TO ROLLBACK DB ENTRY
@@ -191,7 +197,7 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 		// Save to DB
 		metadataToBeSaved.VersionID = transcationResponse.VersionID
 		fileToBeSaved.Location = transcationResponse.Location
-		err = c.fileRepository.CreateFileWithMetadata(context, fileToBeSaved, metadataToBeSaved)
+		err = c.fileRepository.CreateFileWithMetadata(uploadCtx, fileToBeSaved, metadataToBeSaved)
 		if err != nil {
 			slog.Error("Failed to save file metadata to database", slog.Any("error", err))
 		}
@@ -621,6 +627,8 @@ func (c *FileService) ReKey(ctx context.Context, appID, keyUID string) (string, 
 
 // ADMIN ONLY
 func (c *FileService) ListLogs(ctx context.Context, limit, offset int, sortBy, order string) (int64, *[]model.FileLogResponse, error) {
+	// Validate sort parameters to prevent SQL injection
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedLogSortFields)
 
 	count, result, err := c.fileLogsRepository.List(ctx, offset, limit, sortBy, order)
 	if err != nil {
@@ -801,7 +809,7 @@ func (c *FileService) saveFileLog(ctx context.Context, appID, fileID, actorType,
 			"file_name": fileName,
 		},
 	}
-	return c.fileLogsRepository.Create(ctx, log)
+	return c.fileLogsRepository.Create(context.Background(), log)
 }
 
 func (c *FileService) checkClientID(ctx context.Context, clientID string) (string, error) {

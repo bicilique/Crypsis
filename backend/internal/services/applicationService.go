@@ -14,12 +14,15 @@ import (
 type ApplicationService struct {
 	oauth2        OAuth2Interface
 	appRepository repository.ApplicationRepository
+
+	fileLogsRepository repository.FileLogsRepository
 }
 
-func NewApplicationService(oauth2 OAuth2Interface, appRepo repository.ApplicationRepository) ApplicationInterface {
+func NewApplicationService(oauth2 OAuth2Interface, appRepo repository.ApplicationRepository, fileLogsRepository repository.FileLogsRepository) ApplicationInterface {
 	return &ApplicationService{
-		oauth2:        oauth2,
-		appRepository: appRepo,
+		oauth2:             oauth2,
+		appRepository:      appRepo,
+		fileLogsRepository: fileLogsRepository,
 	}
 }
 
@@ -61,7 +64,19 @@ func (a *ApplicationService) AddApp(ctx context.Context, appName, appUri, redire
 	})
 	if err != nil {
 		slog.Warn("Error creating app in DB , deleting client", slog.String("client_id", appCred.ClientId))
-		a.oauth2.DeleteClient(ctx, appCred.ClientId)
+		err = a.oauth2.DeleteClient(ctx, appCred.ClientId)
+		if err != nil {
+			slog.Error("Failed to delete OAuth2 client after app creation failure", slog.Any("error", err))
+			a.fileLogsRepository.Create(context.Background(), &entity.FileLogs{
+				FileID:    "",
+				ActorType: "system",
+				ActorID:   appCred.ClientId,
+				Action:    "delete",
+				IP:        helper.GetClientIP(ctx),
+				UserAgent: helper.GetUserAgent(ctx),
+				Metadata:  map[string]interface{}{"reason": "failed to delete OAuth2 client after app creation failure"},
+			})
+		}
 		return nil, err
 	}
 
@@ -113,6 +128,9 @@ func (a *ApplicationService) GetInfo(ctx context.Context, appUID string) (*model
 }
 
 func (a *ApplicationService) ListApps(ctx context.Context, limit, offset int, sortBy, order string) (int64, *[]model.AppResponse, error) {
+	// Validate sort parameters to prevent SQL injection
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedAppSortFields)
+
 	count, appList, err := a.appRepository.GetListApps(ctx, offset, limit, sortBy, order)
 	if err != nil {
 		return 0, nil, err

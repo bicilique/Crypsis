@@ -153,8 +153,8 @@ func initServices(config *Properties, repos Repositories, db *gorm.DB) Services 
 	}
 
 	oauth2Service := services.NewHydraService(config.HydraAdminURL, config.HydraPublicURL)
-	adminService := services.NewAdminService(oauth2Service, repos.adminRepository, cryptographicService)
-	applicationService := services.NewApplicationService(oauth2Service, repos.applicationRepository)
+	adminService := services.NewAdminService(oauth2Service, repos.adminRepository, repos.fileLogRepository, cryptographicService)
+	applicationService := services.NewApplicationService(oauth2Service, repos.applicationRepository, repos.fileLogRepository)
 
 	fileServiceParams := services.FileServiceParams{
 		CryptoService:         cryptographicService,

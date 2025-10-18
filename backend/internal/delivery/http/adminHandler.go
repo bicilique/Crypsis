@@ -2,6 +2,7 @@ package http
 
 import (
 	"crypsis-backend/internal/delivery/middlewere"
+	"crypsis-backend/internal/helper"
 	"crypsis-backend/internal/model"
 	"crypsis-backend/internal/services"
 	"errors"
@@ -233,6 +234,8 @@ func (a *AdminHandler) ListAdmin(c *gin.Context) {
 
 	offsetStr := c.DefaultQuery("offset", "0")
 	limitStr := c.DefaultQuery("limit", "10")
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	order := c.DefaultQuery("order", "desc")
 
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil || offset < 0 {
@@ -244,7 +247,10 @@ func (a *AdminHandler) ListAdmin(c *gin.Context) {
 		limit = 10
 	}
 
-	result, err := a.adminService.GetAdminList(c.Request.Context(), offset, limit)
+	// Validate sort parameters using centralized helper
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedAdminSortFields)
+
+	result, err := a.adminService.GetAdminList(c.Request.Context(), offset, limit, sortBy, order)
 	if err != nil {
 		switch {
 		case errors.Is(err, model.AdminErrAlreadyExists):
@@ -343,17 +349,8 @@ func (a *AdminHandler) ListApps(c *gin.Context) {
 		limit = 10
 	}
 
-	if order != "asc" && order != "desc" {
-		order = "desc"
-	}
-
-	allowedSortFields := map[string]bool{
-		"created_at": true,
-		"name":       true,
-	}
-	if !allowedSortFields[sortBy] {
-		sortBy = "created_at"
-	}
+	// Validate sort parameters using centralized helper
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedAppSortFields)
 
 	count, result, err := a.appService.ListApps(c.Request.Context(), limit, offset, sortBy, order)
 	if err != nil {
@@ -472,18 +469,8 @@ func (a *AdminHandler) ListFiles(c *gin.Context) {
 		limit = 10
 	}
 
-	if order != "asc" && order != "desc" {
-		order = "desc"
-	}
-
-	allowedSortFields := map[string]bool{
-		"created_at": true,
-		"name":       true,
-		"size":       true,
-	}
-	if !allowedSortFields[sortBy] {
-		sortBy = "created_at"
-	}
+	// Validate sort parameters using centralized helper
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedFileSortFields)
 
 	count, result, err := a.fileService.ListFilesForAdmin(c.Request.Context(), adminID, "", limit, offset, sortBy, order)
 	if err != nil {
@@ -521,18 +508,8 @@ func (a *AdminHandler) ListFilesByAppId(c *gin.Context) {
 		limit = 10
 	}
 
-	if order != "asc" && order != "desc" {
-		order = "desc"
-	}
-
-	allowedSortFields := map[string]bool{
-		"created_at": true,
-		"name":       true,
-		"size":       true,
-	}
-	if !allowedSortFields[sortBy] {
-		sortBy = "created_at"
-	}
+	// Validate sort parameters using centralized helper
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedFileSortFields)
 
 	if appID == "" {
 		model.JSONErrorResponse(c, http.StatusBadRequest, "Invalid app id", "App id is required")
@@ -574,20 +551,8 @@ func (a *AdminHandler) ListLogs(c *gin.Context) {
 		limit = 10
 	}
 
-	if order != "asc" && order != "desc" {
-		order = "desc"
-	}
-
-	allowedSortFields := map[string]bool{
-		"file_id":    true,
-		"action":     true,
-		"timestamp":  true,
-		"ip":         true,
-		"user_agent": true,
-	}
-	if !allowedSortFields[sortBy] {
-		sortBy = "created_at"
-	}
+	// Validate sort parameters using centralized helper
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedLogSortFields)
 
 	count, result, err := a.fileService.ListLogs(c.Request.Context(), limit, offset, sortBy, order)
 	if err != nil {

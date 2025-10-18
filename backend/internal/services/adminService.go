@@ -12,16 +12,18 @@ import (
 )
 
 type AdminService struct {
-	oauth2          OAuth2Interface
-	adminRepository repository.AdminRepository
-	cryptoUtil      CryptographicInterface
+	oauth2            OAuth2Interface
+	adminRepository   repository.AdminRepository
+	fileLogRepository repository.FileLogsRepository
+	cryptoUtil        CryptographicInterface
 }
 
-func NewAdminService(oauth2 OAuth2Interface, adminRepo repository.AdminRepository, cryptoUtil CryptographicInterface) AdminInterface {
+func NewAdminService(oauth2 OAuth2Interface, adminRepo repository.AdminRepository, fileLogsRepository repository.FileLogsRepository, cryptoUtil CryptographicInterface) AdminInterface {
 	return &AdminService{
-		oauth2:          oauth2,
-		adminRepository: adminRepo,
-		cryptoUtil:      cryptoUtil,
+		oauth2:            oauth2,
+		adminRepository:   adminRepo,
+		fileLogRepository: fileLogsRepository,
+		cryptoUtil:        cryptoUtil,
 	}
 }
 
@@ -34,6 +36,11 @@ func (a *AdminService) Login(ctx context.Context, username string, password stri
 	if err != nil {
 		return "", model.AdminErrWrongCredentials
 	}
+
+	// Add constant-time delay to prevent timing attacks
+	defer func() {
+		time.Sleep(100 * time.Millisecond) // Constant delay
+	}()
 
 	result, err := a.oauth2.TokenRequest(ctx, &model.TokenRequest{
 		ClientId:     admin.ClientID,
@@ -76,7 +83,20 @@ func (a *AdminService) Register(ctx context.Context, username string, password s
 	secret, err := a.encryptSecret(input, salt, admin.ClientSecret)
 	if err != nil {
 		slog.Error("Hashing failed", slog.Any("error", err))
-		a.oauth2.DeleteClient(ctx, admin.ClientId)
+		err = a.oauth2.DeleteClient(ctx, admin.ClientId)
+		if err != nil {
+			slog.Error("Failed to delete OAuth2 client after hashing failure", slog.Any("error", err))
+			// ADD AUDIT LOG HERE
+			a.fileLogRepository.Create(context.Background(), &entity.FileLogs{
+				FileID:    "",
+				ActorType: "system",
+				ActorID:   admin.ClientId,
+				Action:    "delete",
+				IP:        helper.GetClientIP(ctx),
+				UserAgent: helper.GetUserAgent(ctx),
+				Metadata:  map[string]interface{}{"reason": "failed to delete OAuth2 client after hashing failure"},
+			})
+		}
 		return "", err
 	}
 
@@ -90,10 +110,23 @@ func (a *AdminService) Register(ctx context.Context, username string, password s
 
 	if err != nil {
 		slog.Error("Failed to create admin", slog.Any("error", err))
-		a.oauth2.DeleteClient(ctx, admin.ClientId)
+		err = a.oauth2.DeleteClient(ctx, admin.ClientId)
+		if err != nil {
+			slog.Error("Failed to delete OAuth2 client after admin creation failure", slog.Any("error", err))
+			// ADD AUDIT LOG HERE
+			a.fileLogRepository.Create(context.Background(), &entity.FileLogs{
+				FileID:    "",
+				ActorType: "system",
+				ActorID:   admin.ClientId,
+				Action:    "delete",
+				IP:        helper.GetClientIP(ctx),
+				UserAgent: helper.GetUserAgent(ctx),
+				Metadata:  map[string]interface{}{"reason": "failed to delete OAuth2 client after admin creation failure"},
+			})
+		}
 		return "", err
 	}
-	return "Succes creating admin with username: " + admin.ClientName, nil
+	return "Success creating admin with username: " + admin.ClientName, nil
 }
 
 func (a *AdminService) RefreshToken(ctx context.Context, adminID, accessToken string) (string, error) {
@@ -108,6 +141,8 @@ func (a *AdminService) RefreshToken(ctx context.Context, adminID, accessToken st
 	if err != nil {
 		return "", err
 	}
+
+	defer secureKeyString(adminSecret)() // securely erase adminSecret from memory
 
 	_, err = a.oauth2.RevokeToken(ctx, admin.ClientID, adminSecret, accessToken)
 	if err != nil {
@@ -138,6 +173,9 @@ func (a *AdminService) RevokeToken(ctx context.Context, adminID, accessToken str
 	if err != nil {
 		return "", err
 	}
+
+	defer secureKeyString(adminSecret)() // securely erase adminSecret from memory
+
 	_, err = a.oauth2.RevokeToken(ctx, admin.ClientID, adminSecret, accessToken)
 	if err != nil {
 		return "", err
@@ -177,8 +215,8 @@ func (a *AdminService) UpdatePassword(ctx context.Context, adminID, newPassword 
 	if err != nil {
 		return err
 	}
-
 	admin.Secret = adminSecret
+	defer secureKeyString(adminSecret)() // securely erase newPassword and adminSecret from memory
 	return a.adminRepository.Update(ctx, admin)
 }
 
@@ -200,11 +238,14 @@ func (a *AdminService) DeleteAdmin(ctx context.Context, request string) (string,
 		return "", err
 	}
 
-	return "Succes deleting admin with username: " + admin.Username, nil
+	return "Success deleting admin with username: " + admin.Username, nil
 }
 
-func (a *AdminService) GetAdminList(ctx context.Context, offset int, limit int) (*[]model.AdminResponse, error) {
-	admins, err := a.adminRepository.GetList(ctx, offset, limit, "created_at", "desc")
+func (a *AdminService) GetAdminList(ctx context.Context, offset int, limit int, sortBy, order string) (*[]model.AdminResponse, error) {
+	// Validate sort parameters to prevent SQL injection
+	sortBy, order = helper.ValidateSortParams(sortBy, order, helper.AllowedAdminSortFields)
+
+	admins, err := a.adminRepository.GetList(ctx, offset, limit, sortBy, order)
 	if err != nil {
 		return nil, err
 	}
@@ -222,11 +263,13 @@ func (a *AdminService) GetAdminList(ctx context.Context, offset int, limit int) 
 }
 
 func (a *AdminService) encryptSecret(input, salt, secret string) (string, error) {
+
 	key, err := a.cryptoUtil.KeyDerivationFunction(input, []byte(salt))
 	if err != nil {
 		return "", err
 	}
 	keyBase64 := base64.StdEncoding.EncodeToString(key)
+	defer secureKeyString(keyBase64)() // securely erase key from memory
 	return a.cryptoUtil.EncryptString(keyBase64, secret)
 }
 
@@ -236,5 +279,6 @@ func (a *AdminService) decryptSecret(input, salt, encryptedSecret string) (strin
 		return "", err
 	}
 	keyBase64 := base64.StdEncoding.EncodeToString(key)
+	defer secureKeyString(keyBase64)() // securely erase key from memory
 	return a.cryptoUtil.DecryptString(keyBase64, encryptedSecret)
 }
