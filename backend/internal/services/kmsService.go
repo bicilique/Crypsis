@@ -96,7 +96,7 @@ func (s *KmsService) GenerateSymetricKey(ctx context.Context, name string) (stri
 		return "", err
 	}
 
-	slog.InfoContext(ctx, "Successfully generated symmetric key", slog.String("keyUID", uniqueIdentifier), slog.String("name", name))
+	// slog.InfoContext(ctx, "Successfully generated symmetric key", slog.String("keyUID", uniqueIdentifier), slog.String("name", name))
 	return uniqueIdentifier, nil
 }
 
@@ -235,7 +235,7 @@ func (s *KmsService) ExportKey(ctx context.Context, keyUID string) (string, erro
 		return "", err
 	}
 
-	slog.InfoContext(ctx, "Successfully exported key", slog.String("keyUID", keyUID))
+	// slog.InfoContext(ctx, "Successfully exported key", slog.String("keyUID", keyUID))
 	return keyMaterial, nil
 }
 
@@ -695,10 +695,10 @@ func (s *KmsService) GenerateKeyPair(ctx context.Context, name string) (string, 
 			ErrKMSResponse, privateKeyUID != "", publicKeyUID != "")
 	}
 
-	slog.InfoContext(ctx, "Successfully generated key pair",
-		slog.String("privateKeyUID", privateKeyUID),
-		slog.String("publicKeyUID", publicKeyUID),
-		slog.String("name", name))
+	// slog.InfoContext(ctx, "Successfully generated key pair",
+	// 	slog.String("privateKeyUID", privateKeyUID),
+	// 	slog.String("publicKeyUID", publicKeyUID),
+	// 	slog.String("name", name))
 	return privateKeyUID, publicKeyUID, nil
 }
 

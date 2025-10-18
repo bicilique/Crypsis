@@ -363,9 +363,34 @@ func (c *FileService) DecryptFile(ctx context.Context, clientID, fileUID string,
 	c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeDecrypt), fileMetaData.File.Name)
 
 	//unwrap key
-	key, err := c.cryptoService.DecryptString(c.keyConfig.KEK, fileMetaData.EncKey)
-	if err != nil {
-		return nil, err
+	var key string
+	if fileMetaData.EncKey == "" {
+		// import key from KMS
+		keyHex, err := c.kmsService.ExportKey(ctx, fileMetaData.KeyUID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Securely wipe keyHex from memory
+		defer secureKeyString(keyHex)()
+
+		// Convert hex string to bytes
+		keyBytes, err := helper.HexToBytes(keyHex)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode hex key: %w", err)
+		}
+
+		// Convert raw key bytes to Tink keyset format
+		key, err = c.cryptoService.ImportRawKeyAsBase64(keyBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert raw key to Tink keyset: %w", err)
+		}
+	} else {
+		// unwrap key
+		key, err = c.cryptoService.DecryptString(c.keyConfig.KEK, fileMetaData.EncKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Securely handle the key
