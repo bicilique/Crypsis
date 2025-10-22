@@ -207,7 +207,8 @@ func TestRawKeyVsTinkKeyCompatibility(t *testing.T) {
 
 		// Generate a raw key and convert it
 		rawKey := make([]byte, 32)
-		rand.Read(rawKey)
+		_, errRead := rand.Read(rawKey)
+		require.NoError(t, errRead)
 		rawKeyConverted, err := service.ImportRawKeyAsBase64(rawKey)
 		if err != nil {
 			t.Fatalf("ImportRawKeyAsBase64 failed: %v", err)
@@ -256,7 +257,8 @@ func TestStringEncryptionWithRawKey(t *testing.T) {
 	t.Run("Encrypt and decrypt string with raw key", func(t *testing.T) {
 		// Generate and convert a raw key
 		rawKey := make([]byte, 32)
-		rand.Read(rawKey)
+		_, err := rand.Read(rawKey)
+		require.NoError(t, err)
 		keyBase64, err := service.ImportRawKeyAsBase64(rawKey)
 		if err != nil {
 			t.Fatalf("ImportRawKeyAsBase64 failed: %v", err)
@@ -439,11 +441,12 @@ func TestKEKValidation(t *testing.T) {
 	t.Run("Test with potentially invalid KEK - raw bytes base64", func(t *testing.T) {
 		// This simulates if KEK was base64-encoded raw bytes (not Tink keyset)
 		kekBytes := make([]byte, 32)
-		rand.Read(kekBytes)
+		_, err := rand.Read(kekBytes)
+		require.NoError(t, err)
 		invalidKEK := base64.StdEncoding.EncodeToString(kekBytes)
 
 		// Try to use it directly (this should fail with "invalid keyset")
-		_, err := service.EncryptString(invalidKEK, "test")
+		_, err = service.EncryptString(invalidKEK, "test")
 		assert.Error(t, err, "EncryptString with base64 raw bytes should fail")
 		assert.Contains(t, err.Error(), "invalid keyset", "Should return 'invalid keyset' error")
 		t.Logf("Expected error: %v", err)

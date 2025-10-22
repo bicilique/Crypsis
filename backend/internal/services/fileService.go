@@ -113,7 +113,7 @@ func (c *FileService) ListFilesForAdmin(ctx context.Context, adminID, appID stri
 		}
 	}
 
-	if c.adminRepository.IsAdmin(ctx, adminID) == false {
+	if !c.adminRepository.IsAdmin(ctx, adminID) {
 		return 0, nil, model.AdminErrNotFound
 	}
 
@@ -170,7 +170,7 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 	}
 
 	// Wrap key MAYBE WE CAN SKIP THIS IF KMS IS ENABLED
-	if c.saveKey == true {
+	if c.saveKey {
 		wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metaDataDTO.Key)
 		if err != nil {
 			slog.Error("Failed to wrap key", slog.Any("error", err))
@@ -325,7 +325,7 @@ func (c *FileService) EncryptFile(ctx context.Context, clientID, fileName string
 	}
 
 	// save key
-	if c.saveKey == true {
+	if c.saveKey {
 		wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metadataDTO.Key)
 		if err != nil {
 			slog.Error("Failed to wrap key", slog.Any("error", err))
@@ -360,7 +360,7 @@ func (c *FileService) DecryptFile(ctx context.Context, clientID, fileUID string,
 	}
 
 	//save to log
-	c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeDecrypt), fileMetaData.File.Name)
+	_ = c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeDecrypt), fileMetaData.File.Name)
 
 	//unwrap key
 	var key string
@@ -537,7 +537,7 @@ func (c *FileService) UpdateFile(ctx context.Context, clientID, fileUID, fileNam
 	}()
 
 	// save to log
-	c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeUpdate), fileMetaData.File.Name)
+	_ = c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeUpdate), fileMetaData.File.Name)
 	return fmt.Sprintf("File %s updated successfully", fileMetaData.File.Name), nil
 }
 
@@ -572,7 +572,7 @@ func (c *FileService) DeleteFile(ctx context.Context, clientID, fileUID string) 
 		return err
 	}
 
-	c.saveFileLog(ctx, validatedAppID, fileUID, constant.ActorTypeClient, string(constant.ActionTypeDelete), result.File.Name)
+	_ = c.saveFileLog(ctx, validatedAppID, fileUID, constant.ActorTypeClient, string(constant.ActionTypeDelete), result.File.Name)
 	return nil
 }
 

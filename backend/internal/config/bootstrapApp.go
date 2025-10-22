@@ -100,7 +100,9 @@ func initHttpServer(services Services, config *Properties, adminRepo repository.
 
 func initServices(config *Properties, repos Repositories, db *gorm.DB) Services {
 	// Load admin IDs into cache
-	repos.adminRepository.LoadAdminIDs(context.Background())
+	if err := repos.adminRepository.LoadAdminIDs(context.Background()); err != nil {
+		slog.Error("Failed to load admin IDs", slog.Any("error", err))
+	}
 
 	minIOService := services.NewMinioService(model.MinIOConfig{
 		Endpoint:        config.StorageEndpoint,
