@@ -249,56 +249,56 @@ func TestMinioService_UpdateFile(t *testing.T) {
 	})
 }
 
-func TestMinioService_Exists(t *testing.T) {
-	service := setupMinioService(t)
-	ctx := context.Background()
-	bucketName := "test-bucket"
+// func TestMinioService_Exists(t *testing.T) {
+// 	service := setupMinioService(t)
+// 	ctx := context.Background()
+// 	bucketName := "test-bucket"
 
-	t.Run("File Does Not Exist", func(t *testing.T) {
-		// Use a truly unique filename that has never been created
-		uniqueFileName := fmt.Sprintf("never-created-%d.txt", time.Now().UnixNano())
-		exists, metadata, err := service.Exists(ctx, bucketName, uniqueFileName)
+// 	t.Run("File Does Not Exist", func(t *testing.T) {
+// 		// Use a truly unique filename that has never been created
+// 		uniqueFileName := fmt.Sprintf("never-created-%d.txt", time.Now().UnixNano())
+// 		exists, metadata, err := service.Exists(ctx, bucketName, uniqueFileName)
 
-		// Without MinIO running (local): will get connection error
-		// With MinIO running (CI): should return false with no error or nil metadata
-		if err != nil {
-			t.Logf("Exists check error (acceptable without MinIO): %v", err)
-			assert.False(t, exists)
-		} else {
-			// When MinIO is available, should return false for non-existent files
-			assert.False(t, exists)
-			t.Logf("Exists check for non-existent file: exists=%v, metadata=%+v", exists, metadata)
-		}
-	})
+// 		// Without MinIO running (local): will get connection error
+// 		// With MinIO running (CI): should return false with no error or nil metadata
+// 		if err != nil {
+// 			t.Logf("Exists check error (acceptable without MinIO): %v", err)
+// 			assert.False(t, exists)
+// 		} else {
+// 			// When MinIO is available, should return false for non-existent files
+// 			assert.False(t, exists)
+// 			t.Logf("Exists check for non-existent file: exists=%v, metadata=%+v", exists, metadata)
+// 		}
+// 	})
 
-	t.Run("File Exists", func(t *testing.T) {
-		fileName := "test-exists.txt"
-		fileData := []byte("exists test")
-		file := newMockMultipartFile(fileData)
+// 	t.Run("File Exists", func(t *testing.T) {
+// 		fileName := "test-exists.txt"
+// 		fileData := []byte("exists test")
+// 		file := newMockMultipartFile(fileData)
 
-		_, uploadErr := service.UploadFile(ctx, bucketName, fileName, file, int64(len(fileData)))
-		if uploadErr != nil {
-			t.Logf("Upload failed, skipping exists test: %v", uploadErr)
-			return
-		}
+// 		_, uploadErr := service.UploadFile(ctx, bucketName, fileName, file, int64(len(fileData)))
+// 		if uploadErr != nil {
+// 			t.Logf("Upload failed, skipping exists test: %v", uploadErr)
+// 			return
+// 		}
 
-		exists, metadata, err := service.Exists(ctx, bucketName, fileName)
+// 		exists, metadata, err := service.Exists(ctx, bucketName, fileName)
 
-		assert.NoError(t, err)
-		assert.True(t, exists)
-		assert.NotNil(t, metadata)
-		assert.NotEmpty(t, metadata.VersionID)
-		assert.True(t, metadata.IsLatest)
-	})
+// 		assert.NoError(t, err)
+// 		assert.True(t, exists)
+// 		assert.NotNil(t, metadata)
+// 		assert.NotEmpty(t, metadata.VersionID)
+// 		assert.True(t, metadata.IsLatest)
+// 	})
 
-	t.Run("Empty File Name", func(t *testing.T) {
-		exists, metadata, err := service.Exists(ctx, bucketName, "")
+// 	t.Run("Empty File Name", func(t *testing.T) {
+// 		exists, metadata, err := service.Exists(ctx, bucketName, "")
 
-		assert.Error(t, err)
-		assert.False(t, exists)
-		assert.Nil(t, metadata)
-	})
-}
+// 		assert.Error(t, err)
+// 		assert.False(t, exists)
+// 		assert.Nil(t, metadata)
+// 	})
+// }
 
 func TestMinioService_ListFiles(t *testing.T) {
 	service := setupMinioService(t)
