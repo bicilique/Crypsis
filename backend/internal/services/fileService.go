@@ -628,7 +628,11 @@ func (c *FileService) ReKey(ctx context.Context, appID, keyUID string) (string, 
 
 	_ = c.saveFileLog(ctx, appID, constant.ActorTypeAdmin, "REKEY", string(constant.ActionTypeReKey), "")
 
-	keyUIDs, err := c.fileRepository.GetAllKeyUIDs(ctx)
+	keyUIDs, errGetKeys := c.fileRepository.GetAllKeyUIDs(ctx)
+	if errGetKeys != nil {
+		return "", fmt.Errorf("failed to get key UIDs: %w", errGetKeys)
+	}
+
 	for _, fileKeyUID := range keyUIDs {
 		key, err := c.kmsService.ExportKey(ctx, fileKeyUID)
 		if err != nil {
