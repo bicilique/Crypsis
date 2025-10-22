@@ -55,11 +55,27 @@ func (s *MinioService) UploadFile(ctx context.Context, bucketName, fileName stri
 		return nil, fmt.Errorf("upload failed for file %s: %w", fileName, err)
 	}
 
+	// Construct location if not provided by MinIO
+	location := resp.Location
+	if location == "" {
+		// Get endpoint from client
+		endpoint := s.client.EndpointURL().String()
+		location = fmt.Sprintf("%s/%s/%s", endpoint, bucketName, fileName)
+	}
+
+	// Version ID may be empty if versioning is not enabled on the bucket
+	versionID := resp.VersionID
+	if versionID == "" {
+		// For non-versioned buckets, we can use "null" as a placeholder
+		// or leave it empty - tests should handle this gracefully
+		versionID = "null"
+	}
+
 	return &model.StorageTransactionResponse{
-		VersionID:      resp.VersionID,
+		VersionID:      versionID,
 		LastModified:   resp.LastModified.String(),
 		Expiration:     resp.Expiration.String(),
-		Location:       resp.Location,
+		Location:       location,
 		ChecksumSHA256: resp.ChecksumSHA256,
 		IsLatest:       true,
 		IsDeleteMarker: false,

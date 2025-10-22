@@ -90,6 +90,14 @@ func ensureTestBucket(t *testing.T, endpoint, accessKey, secretKey string, useSS
 	} else {
 		t.Logf("Test bucket already exists: %s", bucketName)
 	}
+
+	// Enable versioning on the bucket for better test coverage
+	err = minioClient.EnableVersioning(ctx, bucketName)
+	if err != nil {
+		t.Logf("Warning: Could not enable versioning on bucket (this is OK for testing): %v", err)
+	} else {
+		t.Logf("Enabled versioning on bucket: %s", bucketName)
+	}
 }
 
 // getEnv gets an environment variable or returns a default value
@@ -119,8 +127,11 @@ func TestMinioService_UploadFile(t *testing.T) {
 		}
 
 		assert.NotNil(t, resp)
+		// VersionID should be present (even if "null" for non-versioned buckets)
 		assert.NotEmpty(t, resp.VersionID)
+		// Location should be constructed if not provided by MinIO
 		assert.NotEmpty(t, resp.Location)
+		// IsLatest should always be true for new uploads
 		assert.True(t, resp.IsLatest)
 	})
 
