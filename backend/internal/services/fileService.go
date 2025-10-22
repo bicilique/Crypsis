@@ -605,7 +605,7 @@ func (c *FileService) RecoverFile(ctx context.Context, clientID, fileUID string)
 	if err != nil {
 		return "", err
 	}
-	c.saveFileLog(ctx, validatedAppID, fileUID, constant.ActorTypeClient, string(constant.ActionTypeRecover), fileUID)
+	_ = c.saveFileLog(ctx, validatedAppID, fileUID, constant.ActorTypeClient, string(constant.ActionTypeRecover), fileUID)
 	return fmt.Sprintf("File %s recovered successfully", file.File.Name), nil
 }
 
@@ -626,7 +626,7 @@ func (c *FileService) ReKey(ctx context.Context, appID, keyUID string) (string, 
 
 	toBeUpdates := map[string]string{}
 
-	c.saveFileLog(ctx, appID, constant.ActorTypeAdmin, "REKEY", string(constant.ActionTypeReKey), "")
+	_ = c.saveFileLog(ctx, appID, constant.ActorTypeAdmin, "REKEY", string(constant.ActionTypeReKey), "")
 
 	keyUIDs, err := c.fileRepository.GetAllKeyUIDs(ctx)
 	for _, fileKeyUID := range keyUIDs {
@@ -847,7 +847,7 @@ func (c *FileService) checkClientID(ctx context.Context, clientID string) (strin
 	}
 	if app == nil {
 		return "", model.ErrAppNotFound
-	} else if app.IsActive == false {
+	} else if !app.IsActive {
 		return "", model.ErrAppNotActive
 	}
 	return app.ID, nil

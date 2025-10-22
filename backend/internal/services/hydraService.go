@@ -6,7 +6,7 @@ import (
 	"crypsis-backend/internal/model"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -194,7 +194,7 @@ func (h *HydraService) TokenRequest(ctx context.Context, input *model.TokenReque
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("failed to read response body", slog.Any("error", err))
 		return nil, fmt.Errorf("failed to read response body: %w", err)
@@ -236,18 +236,14 @@ func (h *HydraService) RevokeToken(ctx context.Context, clientId, clientSecret, 
 func createHydraClient(input *model.ApplicationRequest) ory.OAuth2Client {
 	var grantTypes []string
 	if input.GrantTypes != nil || len(input.GrantTypes) != 0 {
-		for _, v := range input.GrantTypes {
-			grantTypes = append(grantTypes, v)
-		}
+		grantTypes = append(grantTypes, input.GrantTypes...)
 	} else {
 		grantTypes = []string{"authorization_code", "refresh_token", "client_credentials"}
 	}
 
 	var redirect_uri []string
 	if input.RedirectUris != nil || len(input.RedirectUris) != 0 {
-		for _, v := range input.RedirectUris {
-			redirect_uri = append(redirect_uri, v)
-		}
+		redirect_uri = append(redirect_uri, input.RedirectUris...)
 	} else {
 		redirect_uri = []string{"http://localhost:3000"}
 	}

@@ -16,6 +16,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const requestContextKey contextKey = "request"
+
 type ClientHandler struct {
 	clientService services.FileInterface
 }
@@ -32,7 +37,7 @@ func (ch *ClientHandler) UploadFile(c *gin.Context) {
 		return
 	}
 
-	ctx := context.WithValue(c.Request.Context(), "request", c.Request)
+	ctx := context.WithValue(c.Request.Context(), requestContextKey, c.Request)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file upload"})
@@ -71,7 +76,7 @@ func (ch *ClientHandler) DownloadFile(c *gin.Context) {
 		return
 	}
 
-	ctx := context.WithValue(c.Request.Context(), "request", c.Request)
+	ctx := context.WithValue(c.Request.Context(), requestContextKey, c.Request)
 	fileID := c.Param("id")
 	result, fileName, err := ch.clientService.DownloadFile(ctx, clientID, fileID)
 	if err != nil {
@@ -110,7 +115,7 @@ func (ch *ClientHandler) EncryptFile(c *gin.Context) {
 		return
 	}
 
-	ctx := context.WithValue(c.Request.Context(), "request", c.Request)
+	ctx := context.WithValue(c.Request.Context(), requestContextKey, c.Request)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file upload"})
@@ -153,7 +158,7 @@ func (ch *ClientHandler) DecryptFile(c *gin.Context) {
 		return
 	}
 
-	ctx := context.WithValue(c.Request.Context(), "request", c.Request)
+	ctx := context.WithValue(c.Request.Context(), requestContextKey, c.Request)
 	file, header, err := c.Request.FormFile("file")
 	fileId := c.Request.FormValue("id")
 	if err != nil {
@@ -204,7 +209,7 @@ func (ch *ClientHandler) UpdateFile(c *gin.Context) {
 		return
 	}
 
-	ctx := context.WithValue(c.Request.Context(), "request", c.Request)
+	ctx := context.WithValue(c.Request.Context(), requestContextKey, c.Request)
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file upload"})
