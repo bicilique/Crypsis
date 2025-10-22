@@ -5,6 +5,7 @@ import (
 	"crypsis-backend/internal/entity"
 	"crypsis-backend/internal/model"
 	"fmt"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -22,6 +23,17 @@ func NewAppsRepository(db *gorm.DB) ApplicationRepository {
 // Create adds a new application record to the database.
 func (r *appsRepository) Create(ctx context.Context, app *entity.Apps) error {
 	if err := r.db.WithContext(ctx).Create(app).Error; err != nil {
+		// Normalize unique-constraint / duplicate-key errors from different DB drivers
+		// SQLite: "UNIQUE constraint failed: table.col"
+		// Postgres: "duplicate key value violates unique constraint"
+		// MySQL: "Error 1062: Duplicate entry"
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "unique constraint") ||
+			strings.Contains(errMsg, "unique constraint failed") ||
+			strings.Contains(errMsg, "duplicate key") ||
+			strings.Contains(errMsg, "duplicate entry") {
+			return model.ErrAppAlreadyExists
+		}
 		return fmt.Errorf("failed to create app: %w", err)
 	}
 	return nil

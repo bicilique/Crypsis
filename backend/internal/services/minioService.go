@@ -9,6 +9,7 @@ import (
 	"log"
 	"log/slog"
 	"mime/multipart"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -127,8 +128,31 @@ func (s *MinioService) UpdateFile(ctx context.Context, bucketName, fileName stri
 // Exists checks if a file exists in the specified bucket and returns its metadata.
 // Returns true if the file exists (even if marked for deletion), along with transaction metadata.
 func (s *MinioService) Exists(ctx context.Context, bucketName, fileName string) (bool, *model.StorageTransactionResponse, error) {
-	resp, err := s.client.StatObject(ctx, bucketName, fileName, minio.StatObjectOptions{})
+	// Validate input
+	if fileName == "" {
+		return false, nil, fmt.Errorf("object name cannot be empty")
+	}
 
+	resp, err := s.client.StatObject(ctx, bucketName, fileName, minio.StatObjectOptions{})
+	if err != nil {
+		// Convert MinIO "not found" errors to a friendly (false, nil) result
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "the specified key does not exist") ||
+			strings.Contains(errMsg, "no such key") ||
+			strings.Contains(errMsg, "not found") ||
+			strings.Contains(errMsg, "nosuchkey") {
+			return false, nil, nil
+		}
+
+		slog.Error("failed to check file existence",
+			"error", err,
+			"bucket", bucketName,
+			"file", fileName,
+		)
+		return false, nil, fmt.Errorf("error checking file %s existence: %w", fileName, err)
+	}
+
+	// Check if file is marked for deletion
 	if resp.IsDeleteMarker {
 		result := &model.StorageTransactionResponse{
 			VersionID:      resp.VersionID,
@@ -136,15 +160,6 @@ func (s *MinioService) Exists(ctx context.Context, bucketName, fileName string) 
 		}
 		slog.Warn("file is marked as deleted", slog.Any("result", result))
 		return true, result, nil
-	}
-
-	if err != nil {
-		slog.Error("failed to check file existence",
-			"error", err,
-			"bucket", bucketName,
-			"file", fileName,
-		)
-		return false, nil, fmt.Errorf("error checking file %s existence: %w", fileName, err)
 	}
 
 	return true, &model.StorageTransactionResponse{

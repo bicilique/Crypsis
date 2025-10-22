@@ -19,10 +19,10 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: crypsis_test_db
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd "pg_isready -U postgres -d crypsis_test_db"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
         ports:
           - 5432:5432
     
@@ -39,11 +39,26 @@ jobs:
           -e MINIO_ROOT_PASSWORD=minioadmin \
           minio/minio server /data
         
-        # Wait for MinIO to be ready
+        # Wait for MinIO to be ready with better health check
         echo "Waiting for MinIO to be ready..."
-        timeout 30 bash -c 'until curl -f http://localhost:9000/minio/health/live 2>/dev/null; do sleep 1; done' || true
-        sleep 5
-        echo "MinIO is ready"
+        for i in {1..30}; do
+          if curl -f http://localhost:9000/minio/health/live 2>/dev/null; then
+            echo "MinIO is ready!"
+            break
+          fi
+          echo "Attempt $i: MinIO not ready yet, waiting..."
+          sleep 2
+        done
+        
+        # Verify MinIO is accessible
+        curl -I http://localhost:9000/minio/health/live || echo "Warning: MinIO health check failed"
+    
+    - name: Verify services
+      run: |
+        echo "Checking PostgreSQL..."
+        pg_isready -h localhost -p 5432 -U postgres || echo "Warning: PostgreSQL not ready"
+        echo "Checking MinIO..."
+        curl -f http://localhost:9000/minio/health/live || echo "Warning: MinIO not ready"
     
     - name: Set up Go
       uses: actions/setup-go@v5
