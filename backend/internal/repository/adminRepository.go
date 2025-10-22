@@ -45,7 +45,7 @@ func (r *adminRepository) Create(ctx context.Context, admin *entity.Admins) erro
 	if err := r.db.WithContext(ctx).Create(admin).Error; err != nil {
 		return fmt.Errorf("failed to create admin: %w", err)
 	}
-	r.LoadAdminIDs(ctx)
+	_ = r.LoadAdminIDs(ctx)
 	return nil
 }
 

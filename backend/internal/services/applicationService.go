@@ -67,7 +67,7 @@ func (a *ApplicationService) AddApp(ctx context.Context, appName, appUri, redire
 		err = a.oauth2.DeleteClient(ctx, appCred.ClientId)
 		if err != nil {
 			slog.Error("Failed to delete OAuth2 client after app creation failure", slog.Any("error", err))
-			a.fileLogsRepository.Create(context.Background(), &entity.FileLogs{
+			_ = a.fileLogsRepository.Create(context.Background(), &entity.FileLogs{
 				FileID:    "",
 				ActorType: "system",
 				ActorID:   appCred.ClientId,

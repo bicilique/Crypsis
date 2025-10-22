@@ -204,7 +204,7 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 	}()
 
 	// Save to log
-	c.saveFileLog(ctx, validatedAppID, fileToBeSaved.ID, constant.ActorTypeClient, string(constant.ActionTypeUpload), fileName)
+	_ = c.saveFileLog(ctx, validatedAppID, fileToBeSaved.ID, constant.ActorTypeClient, string(constant.ActionTypeUpload), fileName)
 	return fileToBeSaved.ID, nil
 }
 
@@ -233,7 +233,7 @@ func (c *FileService) DownloadFile(ctx context.Context, clientID, fileUID string
 	}
 
 	//save to log
-	c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeDownload), fileMetaData.File.Name)
+	_ = c.saveFileLog(ctx, validatedAppID, fileMetaData.FileID, constant.ActorTypeClient, string(constant.ActionTypeDownload), fileMetaData.File.Name)
 
 	//download file
 	encryptedFile, err := c.storageService.DownloadFile(ctx, c.bucketName, createFileName(fileMetaData.FileID))
@@ -294,7 +294,7 @@ func (c *FileService) EncryptFile(ctx context.Context, clientID, fileName string
 	}
 
 	//save to log
-	c.saveFileLog(ctx, validatedAppID, fileName, constant.ActorTypeClient, string(constant.ActionTypeEncrypt), fileName)
+	_ = c.saveFileLog(ctx, validatedAppID, fileName, constant.ActorTypeClient, string(constant.ActionTypeEncrypt), fileName)
 
 	// Generate file UID
 	fileUID := helper.GenerateCustomUUID().String()

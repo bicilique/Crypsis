@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -167,8 +169,10 @@ func TestRawKeyEncryptionDecryption(t *testing.T) {
 		// Generate two different raw keys
 		rawKey1 := make([]byte, 32)
 		rawKey2 := make([]byte, 32)
-		rand.Read(rawKey1)
-		rand.Read(rawKey2)
+		_, err := rand.Read(rawKey1)
+		require.NoError(t, err)
+		_, err = rand.Read(rawKey2)
+		require.NoError(t, err)
 
 		key1Base64, _ := service.ImportRawKeyAsBase64(rawKey1)
 		key2Base64, _ := service.ImportRawKeyAsBase64(rawKey2)

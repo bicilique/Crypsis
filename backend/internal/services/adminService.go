@@ -87,7 +87,7 @@ func (a *AdminService) Register(ctx context.Context, username string, password s
 		if err != nil {
 			slog.Error("Failed to delete OAuth2 client after hashing failure", slog.Any("error", err))
 			// ADD AUDIT LOG HERE
-			a.fileLogRepository.Create(context.Background(), &entity.FileLogs{
+			_ = a.fileLogRepository.Create(context.Background(), &entity.FileLogs{
 				FileID:    "",
 				ActorType: "system",
 				ActorID:   admin.ClientId,
@@ -114,7 +114,7 @@ func (a *AdminService) Register(ctx context.Context, username string, password s
 		if err != nil {
 			slog.Error("Failed to delete OAuth2 client after admin creation failure", slog.Any("error", err))
 			// ADD AUDIT LOG HERE
-			a.fileLogRepository.Create(context.Background(), &entity.FileLogs{
+			_ = a.fileLogRepository.Create(context.Background(), &entity.FileLogs{
 				FileID:    "",
 				ActorType: "system",
 				ActorID:   admin.ClientId,
