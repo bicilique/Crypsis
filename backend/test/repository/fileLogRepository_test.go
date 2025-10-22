@@ -28,6 +28,8 @@ func setupFileLogTestDB(t *testing.T) *gorm.DB {
 // createTestFileLog creates a test file log
 func createTestFileLog(t *testing.T, db *gorm.DB, fileID, action string) *entity.FileLogs {
 	log := &entity.FileLogs{
+		ActorID:   "test-actor-id",
+		ActorType: "client",
 		FileID:    fileID,
 		Action:    action,
 		IP:        "127.0.0.1",
@@ -46,6 +48,8 @@ func TestFileLogRepository_Create(t *testing.T) {
 
 	t.Run("successfully create file log", func(t *testing.T) {
 		log := &entity.FileLogs{
+			ActorID:   "test-actor-123",
+			ActorType: "client",
 			FileID:    "file-123",
 			Action:    "upload",
 			IP:        "192.168.1.1",
@@ -70,6 +74,8 @@ func TestFileLogRepository_Create(t *testing.T) {
 
 		for _, action := range actions {
 			log := &entity.FileLogs{
+				ActorID:   "test-actor-456",
+				ActorType: "user",
 				FileID:    fileID,
 				Action:    action,
 				IP:        "10.0.0.1",
@@ -96,6 +102,8 @@ func TestFileLogRepository_List(t *testing.T) {
 	// Create test logs
 	for i := 0; i < 10; i++ {
 		log := &entity.FileLogs{
+			ActorID:   "test-actor-list",
+			ActorType: "system",
 			FileID:    "file-" + string(rune('a'+i)),
 			Action:    "upload",
 			IP:        "192.168.1.1",
@@ -262,6 +270,8 @@ func TestFileLogRepository_DeleteOldLogs(t *testing.T) {
 
 	for _, tc := range testCases {
 		log := &entity.FileLogs{
+			ActorID:   "test-actor-cleanup",
+			ActorType: "system",
 			FileID:    "file-" + tc.name,
 			Action:    "upload",
 			IP:        "127.0.0.1",
@@ -296,6 +306,8 @@ func TestFileLogRepository_DeleteOldLogs(t *testing.T) {
 	// Recreate logs
 	for _, tc := range testCases {
 		log := &entity.FileLogs{
+			ActorID:   "test-actor-cleanup",
+			ActorType: "system",
 			FileID:    "file-" + tc.name,
 			Action:    "upload",
 			IP:        "127.0.0.1",
@@ -336,6 +348,8 @@ func TestFileLogRepository_ConcurrentWrites(t *testing.T) {
 		for i := 0; i < numGoroutines; i++ {
 			go func(index int) {
 				log := &entity.FileLogs{
+					ActorID:   "test-actor-concurrent",
+					ActorType: "user",
 					FileID:    "concurrent-file",
 					Action:    "upload",
 					IP:        "192.168.1." + string(rune('0'+index)),
