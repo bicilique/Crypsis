@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypsis-backend/internal/entity"
 	"crypsis-backend/internal/repository"
+	"fmt"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -337,34 +340,53 @@ func TestFileLogRepository_DeleteOldLogs(t *testing.T) {
 }
 
 func TestFileLogRepository_ConcurrentWrites(t *testing.T) {
-	db := setupFileLogTestDB(t)
+	// Use file-based SQLite for better concurrency support
+	dbPath := fmt.Sprintf("/tmp/test_file_logs_%d.db", time.Now().UnixNano())
+	defer os.Remove(dbPath)
+
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	require.NoError(t, err)
+
+	// Auto migrate the schema
+	err = db.AutoMigrate(&entity.FileLogs{})
+	require.NoError(t, err)
+
 	repo := repository.NewFileLogRepository(db)
 	ctx := context.Background()
 
 	t.Run("handle concurrent log writes", func(t *testing.T) {
 		const numGoroutines = 10
-		done := make(chan bool, numGoroutines)
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		errChan := make(chan error, numGoroutines)
 
 		for i := 0; i < numGoroutines; i++ {
 			go func(index int) {
+				defer wg.Done()
 				log := &entity.FileLogs{
 					ActorID:   "test-actor-concurrent",
 					ActorType: "user",
 					FileID:    "concurrent-file",
 					Action:    "upload",
-					IP:        "192.168.1." + string(rune('0'+index)),
-					UserAgent: "Goroutine-" + string(rune('0'+index)),
+					IP:        fmt.Sprintf("192.168.1.%d", index),
+					UserAgent: fmt.Sprintf("Goroutine-%d", index),
 					Timestamp: time.Now(),
 				}
 				err := repo.Create(ctx, log)
-				assert.NoError(t, err)
-				done <- true
+				if err != nil {
+					errChan <- err
+				}
 			}(i)
 		}
 
 		// Wait for all goroutines to complete
-		for i := 0; i < numGoroutines; i++ {
-			<-done
+		wg.Wait()
+		close(errChan)
+
+		// Check for any errors
+		for err := range errChan {
+			assert.NoError(t, err)
 		}
 
 		// Verify all logs were created

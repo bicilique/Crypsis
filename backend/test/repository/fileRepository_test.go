@@ -6,6 +6,7 @@ import (
 	"crypsis-backend/internal/model"
 	"crypsis-backend/internal/repository"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,15 +26,27 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// createTestApp creates a test application
-func createTestApp(t *testing.T, db *gorm.DB) *entity.Apps {
+// createTestApp creates a test application with optional custom ID
+func createTestApp(t *testing.T, db *gorm.DB, customID ...string) *entity.Apps {
+	appID := "test-app-id"
+	if len(customID) > 0 && customID[0] != "" {
+		appID = customID[0]
+	}
+
 	app := &entity.Apps{
-		ID:           "test-app-id",
+		ID:           appID,
 		Name:         "Test App",
 		ClientID:     "test-client-id",
 		ClientSecret: "test-secret",
 		IsActive:     true,
 	}
+
+	// Check if app already exists to avoid UNIQUE constraint
+	var existing entity.Apps
+	if err := db.Where("id = ?", appID).First(&existing).Error; err == nil {
+		return &existing // Return existing app
+	}
+
 	err := db.Create(app).Error
 	require.NoError(t, err)
 	return app
@@ -59,6 +72,7 @@ func createTestFile(t *testing.T, db *gorm.DB, appID string) *entity.Files {
 // createTestMetadata creates test metadata
 func createTestMetadata(t *testing.T, db *gorm.DB, fileID string) *entity.Metadata {
 	metadata := &entity.Metadata{
+		ID:      "metadata-" + fileID + "-" + time.Now().Format("20060102150405.000000"),
 		FileID:  fileID,
 		KeyUID:  "test-key-uid",
 		EncKey:  "test-enc-key",
@@ -494,21 +508,49 @@ func TestFileRepository_UpdateFileAndMetadata(t *testing.T) {
 
 	t.Run("update only file", func(t *testing.T) {
 		app := createTestApp(t, db)
-		file := createTestFile(t, db, app.ID)
+		// Use unique file ID to avoid constraint errors
+		fileID := "update-only-file-" + time.Now().Format("20060102150405.000000")
+		file := &entity.Files{
+			ID:         fileID,
+			Name:       "test-file.txt",
+			AppID:      app.ID,
+			UserID:     "test-user-id",
+			MimeType:   "text/plain",
+			Size:       1024,
+			BucketName: "test-bucket",
+			Location:   "/test/location",
+		}
+		err := db.Create(file).Error
+		require.NoError(t, err)
+
 		createTestMetadata(t, db, file.ID)
 
 		file.Size = 9999
-		err := repo.UpdateFileAndMetadata(ctx, file, nil)
+		err = repo.UpdateFileAndMetadata(ctx, file, nil)
 		assert.NoError(t, err)
 	})
 
 	t.Run("update only metadata", func(t *testing.T) {
 		app := createTestApp(t, db)
-		file := createTestFile(t, db, app.ID)
+		// Use unique file ID to avoid constraint errors
+		fileID := "update-only-metadata-" + time.Now().Format("20060102150405.000000")
+		file := &entity.Files{
+			ID:         fileID,
+			Name:       "test-file.txt",
+			AppID:      app.ID,
+			UserID:     "test-user-id",
+			MimeType:   "text/plain",
+			Size:       1024,
+			BucketName: "test-bucket",
+			Location:   "/test/location",
+		}
+		err := db.Create(file).Error
+		require.NoError(t, err)
+
 		metadata := createTestMetadata(t, db, file.ID)
 
 		metadata.KeyUID = "new-key-uid"
-		err := repo.UpdateFileAndMetadata(ctx, nil, metadata)
+		err = repo.UpdateFileAndMetadata(ctx, nil, metadata)
 		assert.NoError(t, err)
 	})
 }
@@ -522,18 +564,23 @@ func TestFileRepository_GetAllKeyUIDs(t *testing.T) {
 
 	// Create multiple files with metadata
 	for i := 0; i < 3; i++ {
+		fileID := "file-" + string(rune('a'+i))
 		file := &entity.Files{
-			ID:    "file-" + string(rune('a'+i)),
-			AppID: app.ID,
-			Name:  "file.txt",
-			Size:  1024,
+			ID:       fileID,
+			AppID:    app.ID,
+			Name:     "file.txt",
+			Size:     1024,
+			MimeType: "text/plain",
 		}
 		db.Create(file)
 
 		metadata := &entity.Metadata{
-			FileID: file.ID,
-			KeyUID: "key-uid-" + string(rune('a'+i)),
-			EncKey: "enc-key",
+			ID:      "metadata-" + string(rune('a'+i)), // Add unique ID
+			FileID:  fileID,
+			KeyUID:  "key-uid-" + string(rune('a'+i)),
+			EncKey:  "enc-key",
+			Hash:    "hash-" + string(rune('a'+i)),
+			KeyAlgo: "AES256",
 		}
 		db.Create(metadata)
 	}
@@ -555,18 +602,23 @@ func TestFileRepository_BatchUpdateEncKeys(t *testing.T) {
 	// Create files with metadata
 	keyUIDs := []string{"key-1", "key-2", "key-3"}
 	for i, keyUID := range keyUIDs {
+		fileID := "file-batch-" + string(rune('a'+i)) // Use unique prefix
 		file := &entity.Files{
-			ID:    "file-" + string(rune('a'+i)),
-			AppID: app.ID,
-			Name:  "file.txt",
-			Size:  1024,
+			ID:       fileID,
+			AppID:    app.ID,
+			Name:     "file.txt",
+			Size:     1024,
+			MimeType: "text/plain",
 		}
 		db.Create(file)
 
 		metadata := &entity.Metadata{
-			FileID: file.ID,
-			KeyUID: keyUID,
-			EncKey: "old-enc-key-" + string(rune('a'+i)),
+			ID:      "metadata-batch-" + string(rune('a'+i)), // Add unique ID
+			FileID:  fileID,
+			KeyUID:  keyUID,
+			Hash:    "hash-" + string(rune('a'+i)),
+			KeyAlgo: "AES256",
+			EncKey:  "old-enc-key-" + string(rune('a'+i)),
 		}
 		db.Create(metadata)
 	}
