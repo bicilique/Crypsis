@@ -7,8 +7,11 @@ import (
 	"crypsis-backend/internal/services"
 	"fmt"
 	"mime/multipart"
+	"os"
 	"testing"
 
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -30,12 +33,17 @@ func newMockMultipartFile(data []byte) multipart.File {
 // setupMinioService creates a MinioService instance for testing
 // Note: These tests require a running MinIO instance or mock server
 func setupMinioService(t *testing.T) services.StorageInterface {
-	// Skip if no MinIO server is available
+	// Get MinIO configuration from environment or use defaults
+	endpoint := getEnv("STORAGE_ENDPOINT", "localhost:9000")
+	accessKey := getEnv("STORAGE_ACCESS_KEY", "minioadmin")
+	secretKey := getEnv("STORAGE_SECRET_KEY", "minioadmin")
+	useSSL := getEnv("STORAGE_SSL", "false") == "true"
+
 	config := model.MinIOConfig{
-		Endpoint:        "localhost:9000",
-		AccessKeyID:     "minioadmin",
-		SecretAccessKey: "minioadmin",
-		UseSSL:          false,
+		Endpoint:        endpoint,
+		AccessKeyID:     accessKey,
+		SecretAccessKey: secretKey,
+		UseSSL:          useSSL,
 	}
 
 	service := services.NewMinioService(config)
@@ -43,7 +51,53 @@ func setupMinioService(t *testing.T) services.StorageInterface {
 		t.Skip("MinIO service could not be initialized - skipping integration tests")
 	}
 
+	// Create test bucket if it doesn't exist
+	ensureTestBucket(t, endpoint, accessKey, secretKey, useSSL)
+
 	return service
+}
+
+// ensureTestBucket creates the test bucket if it doesn't exist
+func ensureTestBucket(t *testing.T, endpoint, accessKey, secretKey string, useSSL bool) {
+	ctx := context.Background()
+	bucketName := "test-bucket"
+
+	// Initialize MinIO client
+	minioClient, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		t.Logf("Warning: Could not create MinIO client for bucket setup: %v", err)
+		return
+	}
+
+	// Check if bucket exists
+	exists, err := minioClient.BucketExists(ctx, bucketName)
+	if err != nil {
+		t.Logf("Warning: Could not check if bucket exists: %v", err)
+		return
+	}
+
+	// Create bucket if it doesn't exist
+	if !exists {
+		err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
+		if err != nil {
+			t.Logf("Warning: Could not create test bucket: %v", err)
+		} else {
+			t.Logf("Created test bucket: %s", bucketName)
+		}
+	} else {
+		t.Logf("Test bucket already exists: %s", bucketName)
+	}
+}
+
+// getEnv gets an environment variable or returns a default value
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
 func TestMinioService_UploadFile(t *testing.T) {
