@@ -1,0 +1,2 @@
+# This file ensures the test_files directory is tracked by git
+# The actual test files should be committed so they're available for testing

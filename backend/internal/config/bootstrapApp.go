@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,23 @@ type AppConfig struct {
 }
 
 func BootstrapApp(config *AppConfig) {
+	// Initialize OpenTelemetry if enabled
+	var otelShutdown func(context.Context) error
+	if config.Properties.OTELEnable {
+		shutdown, err := helper.InitOpenTelemetry(helper.OpenTelemetryConfig{
+			ServiceName:    config.Properties.ServiceName,
+			ServiceVersion: config.Properties.ServiceVersion,
+			Environment:    config.Properties.Environment,
+			OTLPEndpoint:   config.Properties.OTELEndpoint,
+		})
+		if err != nil {
+			log.Printf("⚠️  Failed to initialize OpenTelemetry: %v", err)
+		} else {
+			otelShutdown = shutdown
+			log.Println("✅ OpenTelemetry initialized successfully")
+		}
+	}
+
 	// initialize repositories
 	repos := initRepositories(config.DB)
 
@@ -36,6 +54,20 @@ func BootstrapApp(config *AppConfig) {
 	// Start HTTP server with graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Ensure OpenTelemetry shutdown on exit
+	defer func() {
+		if otelShutdown != nil {
+			shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancelShutdown()
+			if err := otelShutdown(shutdownCtx); err != nil {
+				log.Printf("⚠️  Error shutting down OpenTelemetry: %v", err)
+			} else {
+				log.Println("✅ OpenTelemetry shutdown successfully")
+			}
+		}
+	}()
+
 	startHTTPServer(ctx, httpServer)
 
 }
@@ -89,6 +121,8 @@ func initHttpServer(services Services, config *Properties, adminRepo repository.
 		AdminHandler:    delivery.NewAdminHandler(services.applicationService, services.adminService, services.fileService),
 		HydraAdminURL:   config.HydraAdminURL,
 		TokenMiddlewere: tokenMiddlewereConfig,
+		Tracer:          otel.Tracer("crypsis-backend"),
+		Meter:           otel.Meter("crypsis-backend"),
 	}
 	router.Setup()
 

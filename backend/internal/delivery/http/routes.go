@@ -2,8 +2,33 @@ package http
 
 import (
 	"crypsis-backend/internal/delivery/middlewere"
+	"net/http/pprof"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+)
+
+var (
+	httpRequests = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"path", "method", "status"},
+	)
+
+	httpDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "Duration of HTTP requests.",
+			Buckets: prometheus.DefBuckets,
+		},
+		[]string{"path", "method"},
+	)
 )
 
 type RouterConfig struct {
@@ -12,12 +37,31 @@ type RouterConfig struct {
 	AdminHandler    *AdminHandler
 	HydraAdminURL   string
 	TokenMiddlewere middlewere.TokenMiddlewareConfig
+	Tracer          trace.Tracer
+	Meter           metric.Meter
 }
 
 func (c *RouterConfig) Setup() {
+	prometheus.MustRegister(httpRequests)
+	prometheus.MustRegister(httpDuration)
+
+	// Initialize OpenTelemetry tracer and meter if not provided
+	if c.Tracer == nil {
+		c.Tracer = otel.Tracer("crypsis-backend")
+	}
+	if c.Meter == nil {
+		c.Meter = otel.Meter("crypsis-backend")
+	}
+
+	// Apply global OpenTelemetry middleware
+	c.Router.Use(middlewere.OpenTelemetryMiddleware(c.Tracer, c.Meter))
+
 	c.setupClient()
 	c.setupAdmin()
 	c.setupPublic()
+	c.setupDebug()
+
+	c.Router.GET("/metrics", gin.WrapH(promhttp.Handler())) // Prometheus metrics endpoint
 }
 
 func (c *RouterConfig) setupPublic() {
@@ -27,8 +71,9 @@ func (c *RouterConfig) setupPublic() {
 
 func (c *RouterConfig) setupClient() {
 	group := c.Router.Group("/api")
-	// group.Use(middlewere.TokenMiddleware(c.getTokenMiddlewareConfig()))
 	group.Use(middlewere.TokenMiddleware(c.TokenMiddlewere))
+
+	group.Use(middlewere.PrometheusMiddleware(httpRequests, httpDuration)) // Apply Prometheus middleware
 
 	group.POST("/files", c.ClientHandler.UploadFile)
 	group.GET("/files/:id/download", c.ClientHandler.DownloadFile)
@@ -73,4 +118,22 @@ func (c *RouterConfig) setupAdmin() {
 	group.GET("/admin/apps/:id/files", c.AdminHandler.ListFilesByAppId)
 	group.GET("/admin/logs", c.AdminHandler.ListLogs)
 	group.POST("/admin/files/re-key", c.AdminHandler.Rekey)
+}
+
+// setupDebug sets up pprof debugging endpoints
+func (c *RouterConfig) setupDebug() {
+	debug := c.Router.Group("/debug/pprof")
+	{
+		debug.GET("/", gin.WrapF(pprof.Index))
+		debug.GET("/cmdline", gin.WrapF(pprof.Cmdline))
+		debug.GET("/profile", gin.WrapF(pprof.Profile))
+		debug.GET("/symbol", gin.WrapF(pprof.Symbol))
+		debug.GET("/trace", gin.WrapF(pprof.Trace))
+		debug.GET("/allocs", gin.WrapH(pprof.Handler("allocs")))
+		debug.GET("/block", gin.WrapH(pprof.Handler("block")))
+		debug.GET("/goroutine", gin.WrapH(pprof.Handler("goroutine")))
+		debug.GET("/heap", gin.WrapH(pprof.Handler("heap")))
+		debug.GET("/mutex", gin.WrapH(pprof.Handler("mutex")))
+		debug.GET("/threadcreate", gin.WrapH(pprof.Handler("threadcreate")))
+	}
 }

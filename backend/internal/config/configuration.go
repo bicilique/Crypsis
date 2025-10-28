@@ -35,6 +35,13 @@ type Properties struct {
 	KeyPath   string
 	CertPath  string
 	CAPath    string
+
+	// OpenTelemetry
+	OTELEnable     bool
+	OTELEndpoint   string
+	ServiceName    string
+	ServiceVersion string
+	Environment    string
 }
 
 func LoadProperties() *Properties {
@@ -72,6 +79,11 @@ func LoadProperties() *Properties {
 		CAPath:            os.Getenv("CA_PATH"),
 		EncMethod:         os.Getenv("ENC_METHOD"),
 		HashEncryptedFile: os.Getenv("HASH_ENCRYPTED_FILE") == "true",
+		OTELEnable:        getEnvWithDefault("OTEL_ENABLE", "false") == "true",
+		OTELEndpoint:      getEnvWithDefault("OTEL_ENDPOINT", "localhost:4318"),
+		ServiceName:       getEnvWithDefault("SERVICE_NAME", "crypsis-backend"),
+		ServiceVersion:    getEnvWithDefault("SERVICE_VERSION", "1.0.0"),
+		Environment:       getEnvWithDefault("ENVIRONMENT", "development"),
 	}
 
 	return properties
