@@ -5,47 +5,46 @@ import (
 	"net/http/pprof"
 
 	"github.com/gin-gonic/gin"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
-var (
-	httpRequests = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "http_requests_total",
-			Help: "Total number of HTTP requests",
-		},
-		[]string{"path", "method", "status"},
-	)
-
-	httpDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_request_duration_seconds",
-			Help:    "Duration of HTTP requests.",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"path", "method"},
-	)
-)
-
+// RouterConfig holds the configuration for HTTP routing
+//
+// This struct contains all dependencies needed to set up HTTP routes:
+// - Gin router instance
+// - HTTP handlers for client and admin operations
+// - OAuth2 configuration (Hydra)
+// - OpenTelemetry tracer and meter for observability
+//
+// The tracer and meter are used to create spans and record metrics
+// for all HTTP requests, following OpenTelemetry best practices
 type RouterConfig struct {
 	Router          *gin.Engine
 	ClientHandler   *ClientHandler
 	AdminHandler    *AdminHandler
 	HydraAdminURL   string
 	TokenMiddlewere middlewere.TokenMiddlewareConfig
-	Tracer          trace.Tracer
-	Meter           metric.Meter
+	Tracer          trace.Tracer // OpenTelemetry tracer for distributed tracing
+	Meter           metric.Meter // OpenTelemetry meter for metrics collection
 }
 
+// Setup configures all HTTP routes and middleware
+//
+// This method:
+// 1. Initializes OpenTelemetry instrumentation (if not provided)
+// 2. Applies global middleware for tracing and metrics
+// 3. Sets up route groups (public, client, admin, debug)
+//
+// Observability Flow:
+//
+//	All Requests → OpenTelemetry Middleware → OTLP → Collector → Jaeger & Prometheus → Grafana
+//
+// No direct Prometheus instrumentation is used - everything goes through OpenTelemetry
 func (c *RouterConfig) Setup() {
-	prometheus.MustRegister(httpRequests)
-	prometheus.MustRegister(httpDuration)
-
 	// Initialize OpenTelemetry tracer and meter if not provided
+	// This uses the global TraceProvider and MeterProvider set up in main.go
 	if c.Tracer == nil {
 		c.Tracer = otel.Tracer("crypsis-backend")
 	}
@@ -53,15 +52,18 @@ func (c *RouterConfig) Setup() {
 		c.Meter = otel.Meter("crypsis-backend")
 	}
 
-	// Apply global OpenTelemetry middleware
+	// Apply global OpenTelemetry middleware to ALL routes
+	// This automatically instruments every HTTP request with:
+	// - Distributed tracing (spans)
+	// - Metrics (request count, duration, size)
+	// - Error tracking
 	c.Router.Use(middlewere.OpenTelemetryMiddleware(c.Tracer, c.Meter))
 
+	// Set up route groups
+	c.setupPublic()
 	c.setupClient()
 	c.setupAdmin()
-	c.setupPublic()
 	c.setupDebug()
-
-	c.Router.GET("/metrics", gin.WrapH(promhttp.Handler())) // Prometheus metrics endpoint
 }
 
 func (c *RouterConfig) setupPublic() {
@@ -73,7 +75,7 @@ func (c *RouterConfig) setupClient() {
 	group := c.Router.Group("/api")
 	group.Use(middlewere.TokenMiddleware(c.TokenMiddlewere))
 
-	group.Use(middlewere.PrometheusMiddleware(httpRequests, httpDuration)) // Apply Prometheus middleware
+	// group.Use(middlewere.PrometheusMiddleware(httpRequests, httpDuration)) // Apply Prometheus middleware
 
 	group.POST("/files", c.ClientHandler.UploadFile)
 	group.GET("/files/:id/download", c.ClientHandler.DownloadFile)
@@ -92,8 +94,6 @@ func (c *RouterConfig) setupClient() {
 
 func (c *RouterConfig) setupAdmin() {
 	group := c.Router.Group("/api")
-	// group.Use(middlewere.TokenMiddleware(c.getTokenMiddlewareConfig()))
-	// group.Use(middlewere.TokenMiddleware(c.TokenMiddlewere))
 	group.Use(middlewere.AdminTokenMiddleware(c.TokenMiddlewere))
 
 	// Admin Account Management

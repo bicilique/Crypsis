@@ -255,6 +255,59 @@ cd src
 go test -tags=integration ./test/...
 ```
 
+## 📊 Observability & Performance Monitoring
+
+Crypsis includes a complete observability stack for monitoring, tracing, and analyzing application performance.
+
+### Quick Start
+
+```bash
+./start-observability.sh
+```
+
+Then open **Grafana** at http://localhost:3000 (admin/admin)
+
+### What's Included
+
+- **📈 Grafana**: Unified dashboards with real-time metrics visualization
+- **📊 Prometheus**: Time-series metrics database with custom metric collection
+- **🔍 Jaeger**: Distributed tracing for end-to-end request tracking
+- **📡 OpenTelemetry**: Automatic instrumentation with traces and metrics
+
+### Features
+
+✅ **Pre-configured Dashboards**: Ready-to-use performance dashboards  
+✅ **Real-time Monitoring**: Live metrics as your application runs  
+✅ **Distributed Tracing**: Track every request through the entire stack  
+✅ **Performance Analysis**: Identify bottlenecks and optimize  
+✅ **Resource Monitoring**: CPU, memory, goroutines tracking  
+✅ **Custom Metrics**: Encryption time, file size, operation duration  
+
+### Access URLs
+
+| Service | URL | Purpose |
+|---------|-----|---------|
+| **Grafana** | http://localhost:3000 | Main visualization dashboard |
+| **Prometheus** | http://localhost:9090 | Metrics query engine |
+| **Jaeger** | http://localhost:16686 | Trace visualization |
+
+### Documentation
+
+- **[Observability Summary](OBSERVABILITY_SUMMARY.md)**: Quick overview and getting started
+- **[Complete Guide](OBSERVABILITY_COMPLETE_GUIDE.md)**: Detailed architecture and usage
+- **[Quick Reference](OBSERVABILITY_QUICK_REFERENCE.md)**: Commands and troubleshooting
+
+### Performance Testing
+
+Run comprehensive load tests with k6:
+
+```bash
+cd performance_test
+k6 run scripts/k6_load_test.js
+```
+
+Watch real-time metrics in Grafana as tests run, then analyze results to identify optimization opportunities.
+
 ## 📝 Development
 
 ### Project Structure

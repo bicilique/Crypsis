@@ -199,7 +199,13 @@ services:
       - "4317:4317"   # OTLP gRPC receiver
       - "8888:8888"   # Prometheus metrics exposed by collector
       - "8890:8889"   # Prometheus exporter metrics (mapped to 8890 to avoid conflict)
+      - "13133:13133" # Health check endpoint
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Jaeger for trace visualization
   jaeger:
@@ -227,6 +233,25 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    restart: unless-stopped
+
+  # Grafana for visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: crypsis-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./performance_test/grafana/provisioning:/etc/grafana/provisioning
+      - ./performance_test/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - prometheus
+      - jaeger
     restart: unless-stopped
 
   # e-crypt:
@@ -259,3 +284,4 @@ volumes:
   data4-2:
   db_data:
   prometheus_data:
+  grafana_data:
