@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypsis-backend/internal/entity"
+	"crypsis-backend/internal/helper"
 	"fmt"
 	"log"
 	"os"
@@ -56,6 +57,15 @@ func NewDatabase(config Config) (*Databse, error) {
 	sqlDB.SetMaxIdleConns(10)
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	// Register GORM tracing plugin for automatic database operation tracing
+	// This will automatically create spans for all GORM operations (SELECT, INSERT, UPDATE, DELETE)
+	if err := helper.RegisterGormTracing(db, "crypsis-backend"); err != nil {
+		log.Printf("⚠️  Failed to register GORM tracing plugin: %v", err)
+		// Continue even if tracing registration fails
+	} else {
+		log.Println("✅ GORM automatic tracing enabled")
+	}
 
 	return &Databse{
 		Connection: db,

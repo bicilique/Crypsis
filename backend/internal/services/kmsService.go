@@ -64,21 +64,30 @@ func NewKmsService(secureClient *http.Client, kmsURL string) KMSInterface {
 //
 //	keyUID, err := kmsService.GenerateSymetricKey(ctx, "app-encryption-key")
 func (s *KmsService) GenerateSymetricKey(ctx context.Context, name string) (string, error) {
+	// Start tracing span
+	tracer := helper.GetTracingHelper()
+	ctx, span := tracer.StartKMSSpan(ctx, "GenerateSymmetricKey", name)
+	defer span.End()
+
 	// Validate input
 	if strings.TrimSpace(name) == "" {
-		return "", fmt.Errorf("%w: key name cannot be empty", ErrInvalidInput)
+		err := fmt.Errorf("%w: key name cannot be empty", ErrInvalidInput)
+		helper.RecordError(span, err)
+		return "", err
 	}
 
 	// Generate key template
 	jsonBody, err := helper.GenerateKeyTemplate(name)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to generate key template", slog.String("name", name), slog.Any("error", err))
+		helper.RecordError(span, err)
 		return "", fmt.Errorf("failed to generate key template: %w", err)
 	}
 
 	// Send request
 	body, err := s.sendRequest(ctx, jsonBody)
 	if err != nil {
+		helper.RecordError(span, err)
 		return "", err
 	}
 
@@ -86,6 +95,7 @@ func (s *KmsService) GenerateSymetricKey(ctx context.Context, name string) (stri
 	var kmsResp model.KmsResponse
 	if err := json.Unmarshal(body, &kmsResp); err != nil {
 		slog.ErrorContext(ctx, "Failed to parse JSON response", slog.Any("error", err))
+		helper.RecordError(span, err)
 		return "", fmt.Errorf("%w: failed to parse JSON response: %v", ErrKMSResponse, err)
 	}
 
@@ -93,9 +103,11 @@ func (s *KmsService) GenerateSymetricKey(ctx context.Context, name string) (stri
 	uniqueIdentifier, err := extractUniqueIdentifier(kmsResp)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to extract UniqueIdentifier", slog.Any("error", err))
+		helper.RecordError(span, err)
 		return "", err
 	}
 
+	helper.RecordSuccess(span, "Key generated successfully")
 	// slog.InfoContext(ctx, "Successfully generated symmetric key", slog.String("keyUID", uniqueIdentifier), slog.String("name", name))
 	return uniqueIdentifier, nil
 }
@@ -203,21 +215,30 @@ func (s *KmsService) LocateKey(ctx context.Context, name string) ([]string, erro
 //
 //	keyMaterial, err := kmsService.ExportKey(ctx, "key-uid-12345")
 func (s *KmsService) ExportKey(ctx context.Context, keyUID string) (string, error) {
+	// Start tracing span
+	tracer := helper.GetTracingHelper()
+	ctx, span := tracer.StartKMSSpan(ctx, "ExportKey", keyUID)
+	defer span.End()
+
 	// Validate input
 	if strings.TrimSpace(keyUID) == "" {
-		return "", fmt.Errorf("%w: keyUID cannot be empty", ErrInvalidInput)
+		err := fmt.Errorf("%w: keyUID cannot be empty", ErrInvalidInput)
+		helper.RecordError(span, err)
+		return "", err
 	}
 
 	// Generate export template
 	jsonBody, err := helper.GenerateExportTemplate(keyUID)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to generate export template", slog.String("keyUID", keyUID), slog.Any("error", err))
+		helper.RecordError(span, err)
 		return "", fmt.Errorf("failed to generate export template: %w", err)
 	}
 
 	// Send request
 	body, err := s.sendRequest(ctx, jsonBody)
 	if err != nil {
+		helper.RecordError(span, err)
 		return "", err
 	}
 
@@ -225,6 +246,7 @@ func (s *KmsService) ExportKey(ctx context.Context, keyUID string) (string, erro
 	var kmsResp model.KmsResponse
 	if err := json.Unmarshal(body, &kmsResp); err != nil {
 		slog.ErrorContext(ctx, "Failed to parse JSON response", slog.Any("error", err))
+		helper.RecordError(span, err)
 		return "", fmt.Errorf("%w: failed to parse JSON response: %v", ErrKMSResponse, err)
 	}
 
@@ -232,9 +254,11 @@ func (s *KmsService) ExportKey(ctx context.Context, keyUID string) (string, erro
 	keyMaterial, err := extractKeyMaterial(kmsResp)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to extract key material", slog.String("keyUID", keyUID), slog.Any("error", err))
+		helper.RecordError(span, err)
 		return "", err
 	}
 
+	helper.RecordSuccess(span, "Key exported successfully")
 	// slog.InfoContext(ctx, "Successfully exported key", slog.String("keyUID", keyUID))
 	return keyMaterial, nil
 }

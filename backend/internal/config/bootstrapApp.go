@@ -39,6 +39,10 @@ func BootstrapApp(config *AppConfig) {
 		} else {
 			otelShutdown = shutdown
 			log.Println("✅ OpenTelemetry initialized successfully")
+
+			// Initialize global tracing helper for easy access throughout the application
+			helper.InitGlobalTracingHelper(config.Properties.ServiceName)
+			log.Println("✅ Global tracing helper initialized")
 		}
 	}
 

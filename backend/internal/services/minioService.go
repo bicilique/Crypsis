@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypsis-backend/internal/helper"
 	"crypsis-backend/internal/model"
 	"fmt"
 	"io"
@@ -44,6 +45,15 @@ func NewMinioService(input model.MinIOConfig) StorageInterface {
 // Returns a StorageTransactionResponse containing transaction metadata including version ID, last modified time,
 // expiration, location, checksum, and latest status.
 func (s *MinioService) UploadFile(ctx context.Context, bucketName, fileName string, file multipart.File, fileSize int64) (*model.StorageTransactionResponse, error) {
+	// Start tracing span
+	tracer := helper.GetTracingHelper()
+	ctx, span := tracer.StartStorageSpan(ctx, "PutObject", bucketName, fileName)
+	defer span.End()
+
+	helper.AddAttributes(span, map[string]interface{}{
+		"file.size": fileSize,
+	})
+
 	resp, err := s.client.PutObject(ctx, bucketName, fileName, file, fileSize, minio.PutObjectOptions{
 		ContentType: "application/octet-stream",
 	})
@@ -53,6 +63,7 @@ func (s *MinioService) UploadFile(ctx context.Context, bucketName, fileName stri
 			"bucket", bucketName,
 			"file", fileName,
 		)
+		helper.RecordError(span, err)
 		return nil, fmt.Errorf("upload failed for file %s: %w", fileName, err)
 	}
 
