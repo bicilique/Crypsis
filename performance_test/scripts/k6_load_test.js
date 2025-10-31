@@ -26,7 +26,7 @@ export const options = {
 
 // Configuration
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
-const AUTH_TOKEN = __ENV.AUTH_TOKEN || 'ory_at_DDzXY_xIvEfIxoHVQUYNew1ZYD0jIq_92gXyzVcNCi8.M11AAirWQHgautCEf9u7GikjNJGOGvIzV8RP_-6Fums';
+const AUTH_TOKEN = __ENV.AUTH_TOKEN || 'ory_at_RlIjxvgPt_PKyjNRttMK2N5p4IRCLmHUosPAALsTxmY.JMwklzikGc_vosv5wH0CD9B-rjklKrlzpaBg9e94ruc';
 const CSRF_TOKEN = __ENV.CSRF_TOKEN || 'csrf_token_be481debe9e1ebcf14d99f6f631d9a520ca6701ba0f3e4398508af30ebb1f509=9znDvETbFEvXcMNkmypOZFop5yibQ94nZCxAMmDVlj8=';
 
 // Load test files from the test_files directory

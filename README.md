@@ -1,8 +1,623 @@
 # Crypsis - Enterprise File Encryption & Storage Service
 
-A comprehensive, enterprise-grade file encryption and secure storage solution built with Go, featuring OAuth2 authentication, KMS integration, and distributed storage capabilities.
+A comprehensive, production-ready file encryption and secure storage solution with a modern React admin dashboard, built with Go backend, featuring OAuth2 authentication, KMS integration, and distributed storage capabilities.
 
-## 🚀 Features
+## 🌟 Overview
+
+Crypsis is an enterprise-grade platform that provides:
+- **Secure File Storage**: End-to-end encrypted file management
+- **Modern Admin Dashboard**: React + TypeScript frontend with beautiful UI
+- **OAuth2 Authentication**: Industry-standard authentication flow
+- **Key Management**: File-based or external KMS integration
+- **Distributed Storage**: MinIO-backed object storage
+- **Comprehensive Monitoring**: Built-in observability with Grafana, Prometheus, and Jaeger
+- **Production-Ready**: Docker-compose deployment, horizontal scalability
+
+## 🎯 Key Features
+
+### Backend (Go + Gin)
+- ✅ RESTful API with comprehensive endpoints
+- ✅ AES-256-GCM encryption for all files
+- ✅ OAuth2 + Hydra integration for secure authentication
+- ✅ PostgreSQL for metadata storage
+- ✅ MinIO for distributed file storage
+- ✅ OpenTelemetry instrumentation for observability
+- ✅ File integrity verification (SHA-256/512 hashing)
+- ✅ Audit logging for all operations
+- ✅ Key rotation and re-encryption support
+
+### Frontend (React + TypeScript)
+- ✅ Modern, responsive UI built with Tailwind CSS
+- ✅ State management with Zustand
+- ✅ Type-safe with TypeScript
+- ✅ File upload with progress tracking
+- ✅ Admin dashboard with system statistics
+- ✅ Application (OAuth2 client) management
+- ✅ User management interface
+- ✅ Audit log viewer
+- ✅ Security settings and re-keying
+- ✅ Production-ready with Docker deployment
+
+## 🏗️ Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      Frontend (React)                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐ │
+│  │  Dashboard  │  │  File Mgmt   │  │  Admin/Apps/Logs    │ │
+│  └─────────────┘  └──────────────┘  └─────────────────────┘ │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ HTTPS/REST API
+┌───────────────────────────┴──────────────────────────────────┐
+│                   Backend (Go + Gin)                          │
+│  ┌────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │  Handlers  │──│  Services   │──│   Repositories      │   │
+│  └────────────┘  └─────────────┘  └─────────────────────┘   │
+│  │ Auth │ File │  │ Encryption  │  │  Database Access    │   │
+│  │ Admin│ Logs │  │ KMS │ OAuth2│  │  Storage I/O        │   │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+       ┌────────────────────┼────────────────────┐
+       │                    │                    │
+┌──────▼─────┐    ┌─────────▼────────┐   ┌──────▼──────┐
+│PostgreSQL  │    │      MinIO       │   │    Hydra    │
+│ (Metadata) │    │   (File Store)   │   │  (OAuth2)   │
+└────────────┘    └──────────────────┘   └─────────────┘
+       │                    │                    │
+       └────────────────────┴────────────────────┘
+                            │
+              ┌─────────────┴────────────────┐
+              │   Observability Stack        │
+              │ Prometheus│Jaeger│Grafana    │
+              └──────────────────────────────┘
+```
+
+## 📋 Complete API Reference
+
+### Public Endpoints
+| Method | Endpoint | Description | Request Body |
+|--------|----------|-------------|--------------|
+| POST | `/api/admin/login` | Admin login | `{username, password}` |
+
+### Client File Operations (OAuth2 Token Required)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/files` | Upload encrypted file |
+| GET | `/api/files/{id}/download` | Download file |
+| PUT | `/api/files/{id}/update` | Update file |
+| DELETE | `/api/files/{id}/delete` | Delete file |
+| GET | `/api/files/list` | List all files |
+| GET | `/api/files/{id}/metadata` | Get file metadata |
+| POST | `/api/files/encrypt` | Encrypt file (client-side) |
+| POST | `/api/files/decrypt` | Decrypt file (client-side) |
+
+### Admin Management (Admin Token Required)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/logout` | Logout |
+| GET | `/api/admin/refresh-token` | Refresh access token |
+| GET | `/api/admin/list` | List admins |
+| PATCH | `/api/admin/username` | Update username |
+| PATCH | `/api/admin/password` | Update password |
+| DELETE | `/api/admin?id={id}` | Delete admin |
+| POST | `/api/admin/add` | Add new admin |
+
+### Application Management
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/admin/apps` | Create OAuth2 application |
+| GET | `/api/admin/apps` | List all applications |
+| GET | `/api/admin/apps/{id}` | Get application details |
+| DELETE | `/api/admin/apps/{id}` | Delete application |
+| POST | `/api/admin/apps/{id}/recover` | Recover deleted app |
+| PUT | `/api/admin/apps/{id}/rotate-secret` | Rotate client secret |
+
+### File & Log Management
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/files` | List all files (admin view) |
+| GET | `/api/admin/apps/{id}/files` | List files by application |
+| GET | `/api/admin/logs` | View audit logs |
+| POST | `/api/admin/files/re-key` | Re-encrypt with new key |
+
+## 🚀 Quick Start
+
+### Option 1: Docker Compose (Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd Crypsis
+
+# Start all services
+docker-compose up -d
+
+# Initialize the database
+docker-compose exec app ./scripts/init-db.sh
+
+# Access the applications
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:8080
+# MinIO Console: http://localhost:9001
+# Grafana: http://localhost:3000 (monitoring)
+```
+
+### Option 2: Manual Setup
+
+#### Backend Setup
+
+```bash
+# Navigate to backend directory
+cd backend
+
+# Install Go dependencies
+go mod download
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your configuration
+
+# Run database migrations
+# (Ensure PostgreSQL is running)
+
+# Start the backend server
+go run cmd/main.go
+```
+
+#### Frontend Setup
+
+```bash
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env: VITE_API_URL=http://localhost:8080
+
+# Start development server
+npm run dev
+
+# Or build for production
+npm run build
+npm run preview
+```
+
+## ⚙️ Configuration
+
+### Backend Environment Variables
+
+```bash
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=crypsis
+DB_PASSWORD=secure_password
+DB_NAME=crypsis_db
+DB_SSLMODE=disable
+
+# Storage Configuration (MinIO)
+STORAGE_ENDPOINT=localhost:9000
+STORAGE_ACCESS_KEY=minioadmin
+STORAGE_SECRET_KEY=minioadmin
+STORAGE_SSL=false
+BUCKET_NAME=crypsis-files
+
+# Security Configuration
+HASH_METHOD=SHA256
+ENC_METHOD=AES-256-GCM
+HASH_ENCRYPTED_FILE=true
+MKEY_PATH=./resources/master.key
+
+# OAuth2 Configuration (Hydra)
+HYDRA_PUBLIC_URL=http://localhost:4444
+HYDRA_ADMIN_URL=http://localhost:4445
+
+# Optional KMS Configuration
+KMS_ENABLE=false
+KMS_KEY_UID=your-kms-key-id
+KMS_URL=https://kms.example.com
+KEY_PATH=./cosmian/kms.key
+CERT_PATH=./cosmian/kms.crt
+CA_PATH=./cosmian/kms.server.p12
+
+# Server Configuration
+PORT=8080
+GIN_MODE=release
+```
+
+### Frontend Environment Variables
+
+```bash
+# API Configuration
+VITE_API_URL=http://localhost:8080
+
+# Application Configuration
+VITE_APP_NAME=Crypsis
+VITE_APP_VERSION=1.0.0
+
+# Feature Flags
+VITE_ENABLE_FILE_ENCRYPTION=true
+VITE_MAX_FILE_SIZE=104857600
+```
+
+## 🎨 Frontend Features
+
+### Dashboard
+- System statistics overview
+- Recent activity feed
+- Quick actions
+- Storage usage charts
+
+### File Management
+- Drag-and-drop file upload
+- Upload progress tracking
+- File list with sorting and filtering
+- Bulk operations
+- File metadata viewer
+- Download/update/delete operations
+
+### Admin Management
+- Create/edit/delete admin users
+- Password management
+- Role-based access control
+
+### Application Management
+- Register OAuth2 applications
+- View client credentials
+- Rotate secrets
+- Manage redirect URIs
+- Monitor application usage
+
+### Audit Logs
+- Comprehensive activity tracking
+- Filtering by date, user, action
+- Export logs
+- Real-time updates
+
+### Security Settings
+- Key rotation (re-keying)
+- Encryption method configuration
+- Security alerts
+- Access control policies
+
+## 🔒 Security Features
+
+### Encryption
+- **AES-256-GCM**: Industry-standard authenticated encryption
+- **Client-side encryption**: Optional pre-upload encryption
+- **At-rest encryption**: All files encrypted before storage
+- **Key derivation**: PBKDF2 or KMS-based key management
+
+### Authentication & Authorization
+- **OAuth2**: Standard protocol implementation
+- **JWT tokens**: Secure, stateless authentication
+- **Token introspection**: Real-time validation via Hydra
+- **Role-based access**: Admin vs. client permissions
+
+### Audit & Compliance
+- **Complete audit trail**: All operations logged
+- **Tamper-proof logs**: Immutable audit records
+- **IP tracking**: Source IP for all operations
+- **User agent logging**: Device/browser information
+
+## 📊 Monitoring & Observability
+
+### Quick Start Monitoring
+
+```bash
+# Start observability stack
+./start-observability.sh
+
+# Access dashboards
+# Grafana: http://localhost:3000 (admin/admin)
+# Prometheus: http://localhost:9090
+# Jaeger: http://localhost:16686
+```
+
+### Available Metrics
+- HTTP request count and duration
+- File upload/download rates
+- Encryption/decryption performance
+- Database query performance
+- Storage usage
+- Active connections
+- Error rates
+
+### Distributed Tracing
+- End-to-end request tracing
+- Service dependency mapping
+- Performance bottleneck identification
+- Error correlation
+
+## 🧪 Testing
+
+### Backend Tests
+
+```bash
+cd backend
+
+# Run unit tests
+go test ./internal/...
+
+# Run integration tests
+go test -tags=integration ./test/...
+
+# Run with coverage
+go test -cover ./...
+
+# Run specific test
+go test -v ./internal/services -run TestFileService
+```
+
+### Frontend Tests
+
+```bash
+cd frontend
+
+# Run type checking
+npm run type-check
+
+# Run linter
+npm run lint
+
+# Build to verify
+npm run build
+```
+
+### Performance Testing
+
+```bash
+cd performance_test
+
+# Run smoke test
+k6 run scripts/k6_smoke_test.js
+
+# Run load test
+k6 run scripts/k6_load_test.js
+
+# Run stress test
+k6 run scripts/k6_stress_test.js
+
+# Run spike test
+k6 run scripts/k6_spike_test.js
+```
+
+## 📦 Deployment
+
+### Docker Production Deployment
+
+```bash
+# Build images
+docker-compose build
+
+# Deploy to production
+docker-compose -f docker-compose.prod.yml up -d
+
+# Scale services
+docker-compose up -d --scale app=3
+```
+
+### Frontend Production Build
+
+```bash
+cd frontend
+
+# Build optimized production bundle
+npm run build
+
+# Preview production build
+npm run preview
+
+# Deploy dist/ folder to your web server
+# or use the Docker image
+```
+
+### Backend Binary Deployment
+
+```bash
+cd backend
+
+# Build binary
+go build -o crypsis-server cmd/main.go
+
+# Run binary
+./crypsis-server
+```
+
+## 🔧 Development
+
+### Project Structure
+
+```
+Crypsis/
+├── backend/
+│   ├── cmd/                    # Application entry point
+│   ├── internal/
+│   │   ├── config/            # Configuration
+│   │   ├── delivery/http/     # HTTP handlers & routes
+│   │   ├── entity/            # Database models
+│   │   ├── helper/            # Utility functions
+│   │   ├── model/             # Request/Response models
+│   │   ├── repository/        # Data access layer
+│   │   ├── services/          # Business logic
+│   │   └── delivery/middlewere/ # HTTP middleware
+│   ├── scripts/               # Helper scripts
+│   └── test/                  # Test files
+├── frontend/
+│   ├── public/                # Static assets
+│   ├── src/
+│   │   ├── components/        # React components
+│   │   │   ├── features/     # Feature-specific components
+│   │   │   ├── layout/       # Layout components
+│   │   │   └── ui/           # Reusable UI components
+│   │   ├── pages/            # Page components
+│   │   ├── services/         # API services
+│   │   ├── stores/           # Zustand state stores
+│   │   ├── types/            # TypeScript type definitions
+│   │   ├── utils/            # Utility functions
+│   │   └── constants/        # Application constants
+│   ├── Dockerfile            # Frontend Docker image
+│   ├── nginx.conf            # Nginx configuration
+│   └── package.json          # NPM dependencies
+├── config/                    # Configuration files
+├── data/                      # Persistent data
+├── docker-compose.yaml        # Service orchestration
+└── README.md                  # This file
+```
+
+### Adding New Features
+
+#### Backend
+1. Define interface in `internal/interfaces/`
+2. Implement service in `internal/services/`
+3. Add handler in `internal/delivery/http/`
+4. Define routes in `routes.go`
+5. Add tests in `test/`
+
+#### Frontend
+1. Define types in `src/types/`
+2. Create API service in `src/services/`
+3. Create Zustand store in `src/stores/`
+4. Build UI components in `src/components/`
+5. Create page in `src/pages/`
+
+## 📖 API Response Format
+
+### Success Response
+```json
+{
+  "success": true,
+  "message": "Operation successful",
+  "data": {
+    // Response data
+  }
+}
+```
+
+### Success with Count
+```json
+{
+  "success": true,
+  "message": "Data retrieved",
+  "count": 42,
+  "data": [...]
+}
+```
+
+### Error Response
+```json
+{
+  "success": false,
+  "message": "Operation failed",
+  "error": "Detailed error message"
+}
+```
+
+## 🎓 Usage Examples
+
+### Upload File (cURL)
+
+```bash
+# Get access token first (OAuth2)
+TOKEN="your_access_token"
+
+# Upload file
+curl -X POST http://localhost:8080/api/files \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/path/to/your/file.pdf"
+```
+
+### Admin Login
+
+```bash
+curl -X POST http://localhost:8080/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "password"}'
+```
+
+### List Files
+
+```bash
+curl -X GET "http://localhost:8080/api/files/list?offset=0&limit=10" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### Create OAuth2 Application
+
+```bash
+curl -X POST http://localhost:8080/api/admin/apps \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My App",
+    "uri": "https://myapp.com",
+    "redirectUri": "https://myapp.com/callback"
+  }'
+```
+
+## 🆘 Troubleshooting
+
+### Backend Issues
+
+**Database connection failed**
+```bash
+# Check PostgreSQL is running
+docker-compose ps postgres
+
+# Check connection
+psql -h localhost -U crypsis -d crypsis_db
+```
+
+**MinIO connection failed**
+```bash
+# Check MinIO is running
+docker-compose ps minio
+
+# Access MinIO console
+# http://localhost:9001
+```
+
+### Frontend Issues
+
+**Cannot reach API**
+- Verify `VITE_API_URL` in `.env`
+- Check backend is running: `curl http://localhost:8080/health`
+- Check CORS configuration in backend
+
+**Build errors**
+```bash
+# Clear cache and rebuild
+rm -rf node_modules package-lock.json
+npm install
+npm run build
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## � Acknowledgments
+
+- Go Gin framework
+- React and the React ecosystem
+- MinIO for object storage
+- Ory Hydra for OAuth2
+- OpenTelemetry for observability
+- Tailwind CSS for styling
+
+## 📞 Support
+
+For questions, issues, or contributions:
+- Create an issue on GitHub
+- Contact the development team
+- Check the documentation in `/docs`
+
+---
+
+**Built with ❤️ for enterprise-grade security**
 
 ### Core Functionality
 - **Secure File Storage**: Upload, download, update, and delete files with enterprise-level security

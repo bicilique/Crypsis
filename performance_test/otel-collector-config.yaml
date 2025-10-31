@@ -65,6 +65,3 @@ service:
   telemetry:
     logs:
       level: info
-    metrics:
-      level: detailed
-      address: 0.0.0.0:8888
