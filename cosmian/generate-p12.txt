@@ -1,0 +1,45 @@
+# 1. creates kms.key and kms.crt in the current directory
+    openssl req -newkey rsa:4096 -nodes -keyout kms.key -x509 -days 365 -out kms.crt -subj "/CN=kms.local"
+
+# 2. Create File .p12 (PKCS#12)
+    openssl pkcs12 -export -out kms.server.p12 -inkey kms.key -in kms.crt -password pass:password
+
+# 3. Run Cosmian KMS
+docker run -p 9998:9998 --name kms \
+    -v $(pwd)/kms.server.p12:/etc/cosmian_kms/kms.server.p12 \
+    -v $(pwd)/kms.crt:/etc/cosmian_kms/kms.crt \
+    ghcr.io/cosmian/kms:latest \
+    --https-p12-file /etc/cosmian_kms/kms.server.p12 \
+    --https-p12-password password \
+    --authority-cert-file /etc/cosmian_kms/kms.crt
+
+
+# 1. Generate private key
+openssl genpkey -algorithm RSA -out test/certs/kms.key
+
+# 2. Create certificate signing request (CSR)
+openssl req -new -key test/certs/kms.key -out test/certs/kms.csr -subj "/CN=localhost"
+
+# 3. Create file konfigurasi SAN (karena default OpenSSL tidak menambahkan SAN)
+cat > test/certs/san.cnf <<EOF
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+
+[req_distinguished_name]
+CN = localhost
+
+[v3_req]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = localhost
+IP.1 = 127.0.0.1
+EOF
+
+# 4. Generate sertifikat self-signed dengan SAN
+openssl x509 -req -in test/certs/kms.csr -signkey test/certs/kms.key \
+    -out test/certs/kms.crt -days 365 -extfile test/certs/san.cnf -extensions v3_req

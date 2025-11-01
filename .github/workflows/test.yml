@@ -1,0 +1,187 @@
+name: Test and Build
+
+on:
+  push:
+    branches: [ main, dev, develop ]
+  pull_request:
+    branches: [ main, dev, develop ]
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: crypsis_test_db
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crypsis_test_db"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports:
+          - 5432:5432
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Start MinIO
+      run: |
+        docker run -d \
+          --name minio \
+          -p 9000:9000 \
+          -e MINIO_ROOT_USER=minioadmin \
+          -e MINIO_ROOT_PASSWORD=minioadmin \
+          minio/minio server /data
+        
+        # Wait for MinIO to be ready with better health check
+        echo "Waiting for MinIO to be ready..."
+        for i in {1..30}; do
+          if curl -f http://localhost:9000/minio/health/live 2>/dev/null; then
+            echo "MinIO is ready!"
+            break
+          fi
+          echo "Attempt $i: MinIO not ready yet, waiting..."
+          sleep 2
+        done
+        
+        # Verify MinIO is accessible
+        curl -I http://localhost:9000/minio/health/live || echo "Warning: MinIO health check failed"
+    
+    - name: Verify services
+      run: |
+        echo "Checking PostgreSQL..."
+        pg_isready -h localhost -p 5432 -U postgres || echo "Warning: PostgreSQL not ready"
+        echo "Checking MinIO..."
+        curl -f http://localhost:9000/minio/health/live || echo "Warning: MinIO not ready"
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    
+    - name: Install dependencies
+      working-directory: ./backend
+      run: |
+        go mod download
+        go mod verify
+    
+    - name: Run tests
+      working-directory: ./backend
+      env:
+        DB_HOST: localhost
+        DB_PORT: 5432
+        DB_USER: postgres
+        DB_PASSWORD: postgres
+        DB_NAME: crypsis_test_db
+        STORAGE_ENDPOINT: localhost:9000
+        STORAGE_ACCESS_KEY: minioadmin
+        STORAGE_SECRET_KEY: minioadmin
+        STORAGE_SSL: false
+        BUCKET_NAME: test-bucket
+      run: |
+        go test ./test/... -v -coverprofile=coverage.out -covermode=atomic
+    
+    - name: Generate coverage report
+      working-directory: ./backend
+      run: |
+        go tool cover -func=coverage.out
+        go tool cover -html=coverage.out -o coverage.html
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./backend/coverage.out
+        flags: backend
+        name: backend-coverage
+        fail_ci_if_error: false
+    
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          ./backend/coverage.out
+          ./backend/coverage.html
+    
+    - name: Run race detector
+      working-directory: ./backend
+      run: |
+        go test ./test/... -race
+    
+    - name: Cleanup MinIO
+      if: always()
+      run: |
+        docker stop minio || true
+        docker rm minio || true
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        working-directory: ./backend
+        args: --timeout=5m
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+    
+    - name: Build
+      working-directory: ./backend
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        go build -o crypsis-backend-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} cmd/main.go
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: crypsis-backend-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: ./backend/crypsis-backend-*
