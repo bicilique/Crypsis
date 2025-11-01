@@ -81,7 +81,11 @@ func InitOpenTelemetry(config OpenTelemetryConfig) (func(context.Context) error,
 	// Metrics provide aggregated data about system performance
 	metricShutdown, err := initMetrics(ctx, res, config.OTLPEndpoint)
 	if err != nil {
-		traceShutdown(ctx)
+		if shutdownErr := traceShutdown(ctx); shutdownErr != nil {
+			// Log the shutdown error but return the original error
+			// In production, use a proper logger
+			println("Failed to shutdown tracer:", shutdownErr.Error())
+		}
 		return nil, err
 	}
 
@@ -89,7 +93,8 @@ func InitOpenTelemetry(config OpenTelemetryConfig) (func(context.Context) error,
 	// This monitors Go runtime statistics (memory, goroutines, GC)
 	if err := startRuntimeMetrics(); err != nil {
 		// Runtime metrics are optional, log error but continue
-		// In production, you might want to handle this differently
+		// In production, use a proper logger
+		println("Failed to start runtime metrics:", err.Error())
 	}
 
 	// Return a combined shutdown function
