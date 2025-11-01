@@ -123,9 +123,9 @@ func (p *GormTracingPlugin) before(operation string) func(*gorm.DB) {
 		// This is commented out by default to avoid logging sensitive data in production
 		// Uncomment the following block if you need to debug SQL queries:
 		/*
-		if db.Statement.SQL.String() != "" {
-			span.SetAttributes(attribute.String("db.query", db.Statement.SQL.String()))
-		}
+			if db.Statement.SQL.String() != "" {
+				span.SetAttributes(attribute.String("db.query", db.Statement.SQL.String()))
+			}
 		*/
 
 		// Store span in context for the "after" callback
