@@ -254,24 +254,24 @@ services:
       - jaeger
     restart: unless-stopped
 
-  # e-crypt:
-  #   image: afiffaizianur/e-crypt:latest
-  #   container_name: e-crypt
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     - PORT=8080
-  #     - GIN_MODE=debug
-  #     - MKEY_PATH=/sample.key
-  #   volumes:
-  #     - ./resources/sample.key:/sample.key
-  #   depends_on:
-  #     - db
-  #     - nginx
-  #     - hydra
-  #   env_file:
-  #     - .env
-  #   restart: unless-stopped
+  crypsis-backend:
+    image: afiffaizianur/crypsis-backend:latest
+    container_name: crypsis-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - GIN_MODE=debug
+      - MKEY_PATH=/sample.key
+    volumes:
+      - ./resources/sample.key:/sample.key
+    depends_on:
+      - db
+      - nginx
+      - hydra
+    env_file:
+      - .env
+    restart: unless-stopped
 
   frontend:
     build:
