@@ -178,28 +178,32 @@ func initServices(config *Properties, repos Repositories, db *gorm.DB) Services 
 		// Load key from KMS
 		secureClient := helper.CreateHTTPSClient(config.CertPath, config.KeyPath, config.CAPath)
 		kmsService = services.NewKmsService(secureClient, config.KMSUrl)
-		keyHex, err := kmsService.ExportKey(context.Background(), config.KMSKeyUID)
-		if err != nil {
-			log.Fatalf("Failed to export key: %v", err)
-		}
-		slog.Info("Successfully exported KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Int("hex_length", len(keyHex)))
 
-		// Convert hex to bytes
-		keyBytes, err := helper.HexToBytes(keyHex)
-		if err != nil {
-			log.Fatalf("Failed to decode hex key: %v", err)
-		}
-		slog.Info("Converted KEK hex to bytes", slog.Int("bytes_length", len(keyBytes)))
+		// Export KEK from KMS if KMSKeyUID is provided
+		if config.KMSKeyUID != "" {
+			keyHex, err := kmsService.ExportKey(context.Background(), config.KMSKeyUID)
+			if err != nil {
+				slog.Error("Failed to export KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Any("error", err))
+				slog.Error("Encryption Key will be not saved in database")
+			}
+			slog.Info("Successfully exported KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Int("hex_length", len(keyHex)))
 
-		// Convert raw key bytes to Tink keyset format
-		key, err := cryptographicService.ImportRawKeyAsBase64(keyBytes)
-		if err != nil {
-			log.Fatalf("Failed to convert raw key to Tink keyset: %v", err)
-		}
-		slog.Info("Successfully converted KEK to Tink keyset", slog.Int("base64_length", len(key)))
+			// Convert hex to bytes
+			keyBytes, err := helper.HexToBytes(keyHex)
+			if err != nil {
+				slog.Error("Failed to convert KEK hex to bytes", slog.String("keyUID", config.KMSKeyUID), slog.Any("error", err))
+				slog.Error("Encryption Key will be not saved in database")
+			}
 
-		keyConfig.UID = config.KMSKeyUID
-		keyConfig.KEK = key
+			// Convert raw key bytes to Tink keyset format
+			key, err := cryptographicService.ImportRawKeyAsBase64(keyBytes)
+			if err != nil {
+				log.Fatalf("Failed to convert raw key to Tink keyset: %v", err)
+			}
+			slog.Info("Successfully converted KEK to Tink keyset", slog.Int("base64_length", len(key)))
+			keyConfig.UID = config.KMSKeyUID
+			keyConfig.KEK = key
+		}
 	} else {
 		// Load key from file
 		key, err := helper.FileToBase64(config.MKeyPath)

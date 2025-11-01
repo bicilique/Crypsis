@@ -169,8 +169,8 @@ func (c *FileService) UploadFile(ctx context.Context, clientID, fileName string,
 		KeyAlgo: c.encryptionMethod,
 	}
 
-	// Wrap key MAYBE WE CAN SKIP THIS IF KMS IS ENABLED
-	if c.saveKey {
+	// Only save key if enabled and kek is available
+	if c.saveKey && c.keyConfig.KEK != "" {
 		wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metaDataDTO.Key)
 		if err != nil {
 			slog.Error("Failed to wrap key", slog.Any("error", err))
@@ -324,8 +324,8 @@ func (c *FileService) EncryptFile(ctx context.Context, clientID, fileName string
 		KeyAlgo: c.encryptionMethod,
 	}
 
-	// save key
-	if c.saveKey {
+	// Only save key if enabled and kek is available
+	if c.saveKey && c.keyConfig.KEK != "" {
 		wrappedKey, err := c.cryptoService.EncryptString(c.keyConfig.KEK, metadataDTO.Key)
 		if err != nil {
 			slog.Error("Failed to wrap key", slog.Any("error", err))
