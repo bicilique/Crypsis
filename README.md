@@ -239,6 +239,42 @@ docker-compose logs -f
 | 📈 **Prometheus** | [http://localhost:9090](http://localhost:9090) | No auth |
 | 💾 **MinIO Console** | [http://localhost:9001](http://localhost:9001) | minioadmin / minioadmin |
 
+### 🧭 Using start.sh (Quick KMS + Compose Bootstrap)
+
+`start.sh` automates local setup: it generates KMS certs/keys (if missing), creates a sample master key, starts Docker Compose, waits for Postgres, and runs one-shot tasks (MinIO bucket creation and Hydra initialization).
+
+Prerequisites
+- Docker and Docker Compose installed
+- `./scripts/setup-kms-certs.sh` present and executable (used to generate Cosmian KMS certs)
+- Ensure `.env` or `backend/.env` is configured with environment values
+
+Usage
+
+```bash
+# Make script executable once
+chmod +x start.sh
+
+# Run the automated bootstrap (generates keys if missing)
+./start.sh
+```
+
+What the script does
+- Generates KMS certificates/keypair (via `./scripts/setup-kms-certs.sh`) if not present
+- Generates a 32-byte base64 master key at `resources/sample.key` if missing
+- Starts all services with `docker compose up -d`
+- Waits for Postgres to become ready (retries)
+- Runs `createbuckets` and `hydra-init` one-shot tasks if they exist in compose
+
+Troubleshooting
+- If KMS cert generation fails: ensure `./scripts/setup-kms-certs.sh` exists and is executable and Inspect `scripts/` for required openssl/openssl commands.
+- If Postgres does not become ready: check `docker compose logs db --tail=200` and review DB env variables in `.env`.
+- If Hydra or MinIO initialization fails: run the one-shot services manually to inspect logs:
+  - `docker compose run --rm createbuckets`
+  - `docker compose run --rm hydra-init`
+
+Notes
+- `start.sh` is designed for local development convenience. For production, manage certs and keys with a secure process and use orchestration tooling.
+
 ### 🧪 Your First API Request
 
 ```bash
@@ -1080,54 +1116,6 @@ Thanks to all our contributors! 🙏
 
 ---
 
-## 📞 Support & Community
-
-<div align="center">
-
-**Get Help • Share Ideas • Connect with Developers**
-
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/crypsis)
-[![GitHub Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github)](https://github.com/your-org/crypsis/issues)
-[![Documentation](https://img.shields.io/badge/Docs-Read%20More-blue?style=for-the-badge&logo=readthedocs&logoColor=white)](https://docs.crypsis.dev)
-
-</div>
-
-### 💬 Community Channels
-
-| Channel | Purpose | Link |
-|---------|---------|------|
-| 💬 **Discord** | Real-time chat, support, discussions | [Join Discord](https://discord.gg/crypsis) |
-| 🐛 **GitHub Issues** | Bug reports, feature requests | [Open Issue](https://github.com/your-org/crypsis/issues) |
-| 📧 **Email** | Business inquiries, security issues | support@crypsis.dev |
-| 📖 **Documentation** | Guides, tutorials, API reference | [docs.crypsis.dev](https://docs.crypsis.dev) |
-| 🐦 **Twitter** | Updates, announcements | [@CrypsisProject](https://twitter.com/crypsis) |
-
-### 📚 Resources
-
-- **[📖 Full Documentation](https://docs.crypsis.dev)** - Complete guides and API reference
-- **[🎓 Tutorials](./docs/TUTORIALS.md)** - Step-by-step implementation guides
-- **[❓ FAQ](./docs/FAQ.md)** - Frequently asked questions
-- **[🔐 Security Policy](./SECURITY.md)** - Report security vulnerabilities
-- **[📋 Changelog](./CHANGELOG.md)** - Release notes and updates
-
-### 🆘 Getting Help
-
-**Before asking for help:**
-
-1. ✅ Check the [documentation](https://docs.crypsis.dev)
-2. ✅ Search [existing issues](https://github.com/your-org/crypsis/issues)
-3. ✅ Read the [FAQ](./docs/FAQ.md)
-
-**When asking for help, include:**
-
-- Crypsis version you're using
-- Your operating system
-- Steps to reproduce the issue
-- Error messages or logs
-- What you've already tried
-
----
-
 ## 📄 License
 
 <div align="center">
@@ -1181,14 +1169,14 @@ Frontend Framework
 </td>
 <td align="center" width="16.66%">
 <a href="https://min.io">
-<img src="https://min.io/resources/img/logo.svg" width="60" alt="MinIO"/><br/>
+<img src="https://raw.githubusercontent.com/minio/minio/master/.github/logo.svg?sanitize=true" width="60" alt="MinIO"/><br/>
 <b>MinIO</b>
 </a><br/>
 Object Storage
 </td>
 <td align="center" width="16.66%">
 <a href="https://www.ory.sh/hydra">
-<img src="https://www.ory.sh/images/logo.svg" width="60" alt="Ory Hydra"/><br/>
+<img src="https://raw.githubusercontent.com/ory/.github/README/img/ory.png" width="60" alt="Ory Hydra"/><br/>
 <b>Ory Hydra</b>
 </a><br/>
 OAuth2 Server
@@ -1211,7 +1199,7 @@ Dashboards
 </td>
 <td align="center" width="16.66%">
 <a href="https://prometheus.io">
-<img src="https://prometheus.io/assets/prometheus_logo_grey.svg" width="60" alt="Prometheus"/><br/>
+<img src="https://upload.wikimedia.org/wikipedia/commons/3/38/Prometheus_software_logo.svg" width="60" alt="Prometheus"/><br/>
 <b>Prometheus</b>
 </a><br/>
 Metrics
@@ -1222,27 +1210,6 @@ Metrics
 <b>Jaeger</b>
 </a><br/>
 Tracing
-</td>
-<td align="center" width="16.66%">
-<a href="https://opentelemetry.io">
-<img src="https://opentelemetry.io/img/logos/opentelemetry-logo-nav.png" width="60" alt="OpenTelemetry"/><br/>
-<b>OpenTelemetry</b>
-</a><br/>
-Observability
-</td>
-<td align="center" width="16.66%">
-<a href="https://www.docker.com">
-<img src="https://www.docker.com/wp-content/uploads/2022/03/vertical-logo-monochromatic.png" width="60" alt="Docker"/><br/>
-<b>Docker</b>
-</a><br/>
-Containerization
-</td>
-<td align="center" width="16.66%">
-<a href="https://www.typescriptlang.org">
-<img src="https://upload.wikimedia.org/wikipedia/commons/4/4c/Typescript_logo_2020.svg" width="60" alt="TypeScript"/><br/>
-<b>TypeScript</b>
-</a><br/>
-Type Safety
 </td>
 </tr>
 </table>
