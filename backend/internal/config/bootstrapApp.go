@@ -183,26 +183,29 @@ func initServices(config *Properties, repos Repositories, db *gorm.DB) Services 
 		if config.KMSKeyUID != "" {
 			keyHex, err := kmsService.ExportKey(context.Background(), config.KMSKeyUID)
 			if err != nil {
-				slog.Error("Failed to export KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Any("error", err))
-				slog.Error("Encryption Key will be not saved in database")
-			}
-			slog.Info("Successfully exported KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Int("hex_length", len(keyHex)))
-
-			// Convert hex to bytes
-			keyBytes, err := helper.HexToBytes(keyHex)
-			if err != nil {
-				slog.Error("Failed to convert KEK hex to bytes", slog.String("keyUID", config.KMSKeyUID), slog.Any("error", err))
-				slog.Error("Encryption Key will be not saved in database")
+				slog.Warn("Failed to export KEK from KMS", slog.String("keyUID", config.KMSKeyUID))
+				slog.Warn("Encryption Key will be not saved in database")
 			}
 
-			// Convert raw key bytes to Tink keyset format
-			key, err := cryptographicService.ImportRawKeyAsBase64(keyBytes)
-			if err != nil {
-				log.Fatalf("Failed to convert raw key to Tink keyset: %v", err)
+			if keyHex != "" {
+				keyBytes, err := helper.HexToBytes(keyHex)
+				if err != nil {
+					slog.Warn("Failed to convert KEK hex to bytes", slog.String("keyUID", config.KMSKeyUID), slog.Any("error", err))
+					slog.Warn("Encryption Key will be not saved in database")
+				}
+				// Convert raw key bytes to Tink keyset format
+				if keyBytes != nil {
+					key, err := cryptographicService.ImportRawKeyAsBase64(keyBytes)
+					if err != nil {
+						log.Fatalf("Failed to convert raw key to Tink keyset: %v", err)
+					}
+					slog.Info("Successfully converted KEK to Tink keyset", slog.Int("base64_length", len(key)))
+					keyConfig.UID = config.KMSKeyUID
+					keyConfig.KEK = key
+				}
+				slog.Info("Successfully exported KEK from KMS", slog.String("keyUID", config.KMSKeyUID), slog.Int("hex_length", len(keyHex)))
 			}
-			slog.Info("Successfully converted KEK to Tink keyset", slog.Int("base64_length", len(key)))
-			keyConfig.UID = config.KMSKeyUID
-			keyConfig.KEK = key
+
 		}
 	} else {
 		// Load key from file

@@ -23,6 +23,11 @@ services:
       - data1-1:/data1
       - data1-2:/data2
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: "384M"    
 
   minio2:
     <<: *minio-common
@@ -31,6 +36,11 @@ services:
       - data2-1:/data1
       - data2-2:/data2
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: "384M"
 
   minio3:
     <<: *minio-common
@@ -39,6 +49,11 @@ services:
       - data3-1:/data1
       - data3-2:/data2
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: "384M"
 
   minio4:
     <<: *minio-common
@@ -47,6 +62,11 @@ services:
       - data4-1:/data1
       - data4-2:/data2
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.4"
+          memory: "384M"    
 
   createbuckets:
     image: minio/mc
@@ -59,6 +79,11 @@ services:
         condition: service_healthy
       minio4:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "128M"            
     env_file: .env
     entrypoint: >
       /bin/sh -c "
@@ -94,6 +119,11 @@ services:
       - minio3
       - minio4
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"        
 
   db:
     image: postgres:16.3
@@ -127,6 +157,11 @@ services:
       - minio3
       - minio4
     restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1G"
 
   hydra-migrate:
     image: oryd/hydra:v2.2
@@ -136,6 +171,11 @@ services:
     environment:
       DSN: postgres://${HYDRA_DB_USER}:${HYDRA_DB_PASSWORD}@db:5432/${HYDRA_DB}?sslmode=disable
     command: migrate sql -e --yes
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "128M"        
 
   hydra:
     image: oryd/hydra:v2.2
@@ -154,6 +194,11 @@ services:
       hydra-migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"        
 
   hydra-init:
     image: alpine:latest
@@ -164,6 +209,11 @@ services:
     entrypoint: ["/bin/sh", "/init-hydra.sh"]
     env_file: .env
     restart: on-failure
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: "128M"  
 
   crypsis-kms:
     image: ghcr.io/cosmian/kms:latest
@@ -171,8 +221,11 @@ services:
     ports:
       - "9998:9998"
     volumes:
-      - ./cosmian/kms.server.p12:/etc/cosmian_kms/kms.server.p12
-      - ./cosmian/kms.crt:/etc/cosmian_kms/kms.crt
+      # mount full directory so all certs/keys are present and permissions preserved
+      - ./cosmian:/etc/cosmian_kms:ro
+    environment:
+      - DATABASE_TYPE=postgresql
+      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@db:5432/kms_db?sslmode=disable
     command:
       - --https-p12-file
       - /etc/cosmian_kms/kms.server.p12
@@ -180,12 +233,24 @@ services:
       - password
       - --authority-cert-file
       - /etc/cosmian_kms/kms.crt
+      - --database-type
+      - postgresql
+      - --database-url
+      - postgres://postgres:${POSTGRES_PASSWORD}@db:5432/kms_db?sslmode=disable
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "-k", "https://localhost:9998"]
       interval: 10s
       timeout: 5s
       retries: 5
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"      
 
   # OpenTelemetry Collector for distributed tracing
   otel-collector:
@@ -206,6 +271,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: "256M"      
 
   # Jaeger for trace visualization
   jaeger:
@@ -217,6 +287,11 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: "256M"    
 
   # Prometheus for metrics collection
   prometheus:
@@ -228,13 +303,18 @@ services:
       - '--web.console.libraries=/etc/prometheus/console_libraries'
       - '--web.console.templates=/etc/prometheus/consoles'
       - '--web.enable-lifecycle'
-      - '--enable-feature=exemplar-storage'
     volumes:
       - ./performance_test/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
+
 
   # Grafana for visualization and dashboards
   grafana:
@@ -245,7 +325,10 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,grafana-piechart-panel
+      # Removed deprecated Angular plugins that are no longer supported
+      # - grafana-clock-panel (use core clock panel)
+      # - grafana-piechart-panel (use core pie chart)
+      # - grafana-simple-json-datasource (deprecated)
     volumes:
       - grafana_data:/var/lib/grafana
       - ./performance_test/grafana/provisioning:/etc/grafana/provisioning
@@ -254,6 +337,11 @@ services:
       - prometheus
       - jaeger
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.3"
+          memory: "256M"    
 
   crypsis-backend:
     image: afiffaizianur/crypsis-backend:latest
@@ -264,15 +352,28 @@ services:
       - PORT=8080
       - GIN_MODE=debug
       - MKEY_PATH=/sample.key
+      - KMS_ENABLE=true
+      - KEY_PATH=/etc/cosmian_kms/kms.key
+      - CERT_PATH=/etc/cosmian_kms/kms.crt
+      - CA_PATH=/etc/cosmian_kms/kms.crt
     volumes:
       - ./resources/sample.key:/sample.key
+      - ./cosmian:/etc/cosmian_kms:ro
     depends_on:
       - db
       - nginx
       - hydra
+      - otel-collector
+      - crypsis-kms
     env_file:
       - .env
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0"
+          memory: "3G"
+
 
   # frontend:
   #   build:

@@ -54,6 +54,10 @@ create_db_and_user() {
 create_db_and_user "$TEST_DEV_DB" "$TEST_DEV_USER" "$TEST_DEV_PASSWORD"
 create_db_and_user "$HYDRA_DB" "$HYDRA_DB_USER" "$HYDRA_DB_PASSWORD"
 
+# Create KMS database
+echo "Creating KMS database..."
+create_db_and_user "kms_db" "$POSTGRES_USER" "$POSTGRES_PASSWORD"
+
 # Load schema file
 SCHEMA_PATH="$(dirname "$0")/init_schema.sql"
 
