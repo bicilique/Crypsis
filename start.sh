@@ -22,20 +22,15 @@ wait_for() {
   return 0
 }
 
-# 1) Ensure KMS certificates/keys exist (generate if missing)
-if [ ! -f "cosmian/kms.server.p12" ] || [ ! -f "cosmian/kms.key" ] || [ ! -f "cosmian/kms.crt" ]; then
-    echo "📝 Step 1: Generating KMS certificates and keys..."
-    if [ -x "./scripts/setup-kms-certs.sh" ]; then
-        ./scripts/setup-kms-certs.sh
-    else
-        echo "Error: ./scripts/setup-kms-certs.sh not found or not executable. Please create KMS certs under cosmian/ and rerun."
-        exit 1
-    fi
-    echo ""
+# 1) Ensure KMS certificates/keys exist (always regenerate for fresh start)
+echo "📝 Step 1: Generating KMS certificates and keys..."
+if [ -x "./scripts/setup-kms-certs.sh" ]; then
+    ./scripts/setup-kms-certs.sh
 else
-    echo "✓ KMS certificates and keys already exist"
-    echo ""
+    echo "Error: ./scripts/setup-kms-certs.sh not found or not executable."
+    exit 1
 fi
+echo ""
 
 # 2) Ensure master key exists (create sample if missing)
 if [ ! -f "resources/sample.key" ]; then
@@ -52,15 +47,15 @@ fi
 
 # 3) Start services
 echo "📝 Step 3: Starting all services (docker compose up -d)..."
-docker compose up -d
+docker compose -f docker-compose-respurce-limit.yaml up -d 
 
 echo ""
 
 # 4) Wait for Postgres to be ready inside the 'db' service
 echo "⏳ Waiting for Postgres to be ready..."
-if ! wait_for "docker compose exec -T db pg_isready -U \"${POSTGRES_USER:-postgres}\"" 60 2; then
+if ! wait_for "docker compose -f docker-compose-respurce-limit.yaml exec -T db pg_isready -U \"${POSTGRES_USER:-postgres}\"" 60 2; then
   echo "Postgres did not become ready in time. Check 'docker compose logs db'"
-  docker compose logs --no-color db --tail=200
+  docker compose -f docker-compose-respurce-limit.yaml logs --no-color db --tail=200
   exit 1
 fi
 
@@ -69,25 +64,35 @@ echo "✓ Postgres is ready"
 echo "\n🔁 Running one-time initialization tasks..."
 
 # 5) Create MinIO buckets and users (run createbuckets service if defined)
-if docker compose ps --services | grep -q "createbuckets"; then
+if docker compose -f docker-compose-respurce-limit.yaml ps --services | grep -q "createbuckets"; then
   echo "🧰 Creating MinIO buckets and user (createbuckets)..."
-  docker compose run --rm createbuckets || echo "Warning: createbuckets service failed — check logs"
+  docker compose -f docker-compose-respurce-limit.yaml run --rm createbuckets || echo "Warning: createbuckets service failed — check logs"
   echo ""
 fi
 
 # 6) Initialize Hydra (run hydra-init if present)
-if docker compose ps --services | grep -q "hydra-init"; then
+if docker compose -f docker-compose-respurce-limit.yaml ps --services | grep -q "hydra-init"; then
   echo "🔐 Initializing Hydra (hydra-init)..."
-  docker compose run --rm hydra-init || echo "Warning: hydra-init failed — check logs"
+  docker compose -f docker-compose-respurce-limit.yaml run --rm hydra-init || echo "Warning: hydra-init failed — check logs"
   echo ""
 fi
 
-# 7) Wait a bit and show service status
+# 7) Wait for KMS to be ready
+echo "⏳ Waiting for KMS to be ready..."
+if ! wait_for "docker compose -f docker-compose-respurce-limit.yaml exec -T crypsis-kms curl -f -k https://localhost:9998" 60 2; then
+  echo "KMS did not become ready in time. Check 'docker compose logs crypsis-kms'"
+  docker compose -f docker-compose-respurce-limit.yaml logs --no-color crypsis-kms --tail=200
+  exit 1
+fi
+
+echo "✓ KMS is ready"
+
+# 8) Wait a bit and show service status
 echo "⏳ Waiting for services to settle..."
 sleep 5
 
 echo "\n📊 Service Status:"
-docker compose ps
+docker compose -f docker-compose-respurce-limit.yaml ps
 
 echo ""
 echo "✅ Setup complete!"
@@ -101,6 +106,6 @@ echo "  - Hydra Public: http://localhost:4444"
 echo "  - KMS (HTTPS): https://localhost:9998"
 echo "  - Frontend: http://localhost:80"
 echo ""
-echo "To view logs:    docker compose logs -f"
-echo "To stop:         docker compose down"
+echo "To view logs:    docker compose -f docker-compose-respurce-limit.yaml logs -f"
+echo "To stop:         docker compose -f docker-compose-respurce-limit.yaml down"
 echo ""
